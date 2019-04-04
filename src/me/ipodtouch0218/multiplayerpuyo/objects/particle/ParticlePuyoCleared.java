@@ -1,11 +1,12 @@
 package me.ipodtouch0218.multiplayerpuyo.objects.particle;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.java2dengine.util.Vector2D;
-import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType.PuyoSprites;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard;
+import me.ipodtouch0218.multiplayerpuyo.manager.PuyoBoardManager;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
 
 public class ParticlePuyoCleared extends GameObject {
 
@@ -20,8 +21,10 @@ public class ParticlePuyoCleared extends GameObject {
 	
 	@Override
 	public void tick(double delta) {
+		if (PuyoBoardManager.isPaused()) { return; }
+		
 		lifetime-=delta;
-		if (lifetime <= 0) { PuyoGameMain.getGameEngine().removeGameObject(this); return; }
+		if (lifetime <= 0) { GameEngine.removeGameObject(this); return; }
 		
 		vel.add(0, (0.3*60d)*delta);
 		x += vel.getX();

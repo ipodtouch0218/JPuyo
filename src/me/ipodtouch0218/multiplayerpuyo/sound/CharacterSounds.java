@@ -24,6 +24,13 @@ public enum CharacterSounds {
 	GARBAGE_SMALL("garbage/small.wav"),
 	GARBAGE_BIG("garbage/big.wav"),
 	
+	PARTY_SELF("party/self.wav"),
+	PARTY_OTHER("party/other.wav"),
+	PARTY_KO("party/ko.wav"),
+	PARTY_FIRST("party/first.wav"),
+	PARTY_SECOND("party/second.wav"),
+	PARTY_LOSE("party/lose.wav"),
+	
 	SELECT("select.wav"),
 	WIN("win.wav"),
 	LOSE("lose.wav");
@@ -34,8 +41,8 @@ public enum CharacterSounds {
 		location = loc;
 	}
 	
-	public Sound getSound(PuyoCharacter chara) {
-		return Sound.getSound("character/" + chara.getResStr() + "/" + location, true);
+	public Sound getSound(PuyoCharacter chara, boolean alt) {
+		return Sound.getSound("character/" + chara.getResStr() + "/" + (alt ? "alt/" : "normal/") + location, true);
 	}
 	public String getLocation() {
 		return location;

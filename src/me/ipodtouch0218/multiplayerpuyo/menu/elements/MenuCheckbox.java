@@ -9,8 +9,8 @@ import me.ipodtouch0218.multiplayerpuyo.manager.PlayerManager;
 
 public class MenuCheckbox extends MenuElement {
 
-	private static final GameSprite checked = new GameSprite("ui/menu/checkbox-1.png");
-	private static final GameSprite unchecked = new GameSprite("ui/menu/checkbox-0.png");
+	private static final GameSprite checked = new GameSprite("ui/menu/checkbox-1.png", false);
+	private static final GameSprite unchecked = new GameSprite("ui/menu/checkbox-0.png", false);
 	
 	private String text;
 	private boolean value;

@@ -11,13 +11,14 @@ import me.ipodtouch0218.java2dengine.display.sprite.SpriteSheet;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.multiplayerpuyo.manager.Controls;
 import me.ipodtouch0218.multiplayerpuyo.misc.PuyoCharacter;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
 import me.ipodtouch0218.multiplayerpuyo.sound.CharacterSounds;
 
 public class ObjCharacterSelect extends GameObject {
 
 	private static final SpriteSheet playercursors = new SpriteSheet("ui/character/cursors.png", 29, 19);
-	private static final GameSprite selected = new GameSprite("ui/character/selected.png"); //-5,-5
-	private static final GameSprite blank = new GameSprite("ui/character/blank.png");
+	private static final GameSprite selected = new GameSprite("ui/character/selected.png", false); //-5,-5
+	private static final GameSprite blank = new GameSprite("ui/character/blank.png", false);
 	
 	private HashMap<ObjPuyoBoard, CursorInfo> pos = new HashMap<>();
 	private boolean allready;
@@ -25,7 +26,7 @@ public class ObjCharacterSelect extends GameObject {
 	public ObjCharacterSelect(ArrayList<ObjPuyoBoard> boards) {
 		for (ObjPuyoBoard b : boards) {
 			pos.put(b, new CursorInfo());
-			b.setCharacter(PuyoCharacter.values()[0]);
+			b.setCharacter(PuyoCharacter.values()[0], false);
 		}
 	}
 	
@@ -33,7 +34,6 @@ public class ObjCharacterSelect extends GameObject {
 	@Override
 	public void tick(double delta) {
 		if (allready) {
-			
 			return;
 		}
 		for (Entry<ObjPuyoBoard,CursorInfo> entry : pos.entrySet()) {
@@ -45,14 +45,18 @@ public class ObjCharacterSelect extends GameObject {
 			
 			checkForMovement(board, delta);
 			checkForConfirmation(board);
+			if (info.held) {
+				info.heldtimer += delta;
+			}
 			
 			if (!info.confirmed) { allready = false; }
 		}
 	}
 	private boolean checkForMovement(ObjPuyoBoard b, double delta) {
 		Controls c = b.getControls();
-		if (c == null) { return false; }
 		CursorInfo inf = pos.get(b);
+		if (c == null || inf.pressed) { return false; }
+		
 		if (inf.timer > 0) {
 			inf.timer-=delta;
 			return false;
@@ -97,22 +101,35 @@ public class ObjCharacterSelect extends GameObject {
 			inf.timer = 0.25;
 			int chara = inf.x+inf.y*10;
 			if (chara < PuyoCharacter.values().length) {
-				b.setCharacter(PuyoCharacter.values()[chara]);
+				b.setCharacter(PuyoCharacter.values()[chara], inf.alternate);
 			}
 		}
 		return updateTimer;
 	}
+	
 	private void checkForConfirmation(ObjPuyoBoard b) {
 		Controls c = b.getControls();
-		if (c == null || c.menuEnter) {
-			CursorInfo inf = pos.get(b);
+		CursorInfo inf = pos.get(b);
+		
+		if (inf.pressed) {
+			inf.held = c.menuEnter;
+		}
+		
+		if (c == null || (inf.heldtimer > 1) || (inf.pressed && !inf.held)) {
+
+			inf.alternate = (inf.heldtimer > 1);
 			inf.confirmed = true;
-			b.getCharacter().getSound(CharacterSounds.SELECT).play();
+			CharacterSounds.SELECT.getSound(b.getCharacter(), inf.alternate).play();
+			b.setCharacter(b.getCharacter(), inf.alternate);
+		}
+		if (c.menuEnter) {
+			inf.pressed = true;
 		}
 	}
-	
+
 	@Override
 	public void render(Graphics2D g) {
+		//drawChars(Graphics g);
 		
 		int counter = 0;
 		for (int y1 = 0; y1 < 3; y1++) {
@@ -152,6 +169,10 @@ public class ObjCharacterSelect extends GameObject {
 			int player = b.getPlayer()+1;
 			boolean lower = player > 2;
 			g.drawImage(playercursors.getSprite(player-1, 0).getImage(), xpos+(player%2==0 ? 29 : 0), ypos-1+(lower ? 40 : 0), null);
+			
+			if (inf.alternate) {
+				g.drawImage(playercursors.getSprite(4, 0).getImage(), xpos+(player%2==0 ? 29 : 0), ypos-1+(lower ? 40 : 0), null);
+			}
 		}
 	}
 	
@@ -167,11 +188,9 @@ public class ObjCharacterSelect extends GameObject {
 	//---//
 	private class CursorInfo {
 		
-		double timer;
-		
+		double timer, heldtimer;
 		int x, y;
-		
-		boolean confirmed;
+		boolean confirmed, alternate, held, pressed;
 		
 	}
 }

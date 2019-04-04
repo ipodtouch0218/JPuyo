@@ -6,7 +6,9 @@ public class PuyoInfo implements Cloneable {
 
 	public PuyoType type;
 	
-	public int icetimer;
+	public PartyItem partyItem;
+	
+	public int icetimer, icehealth = 2;
 	public boolean ice;
 	
 	@Override

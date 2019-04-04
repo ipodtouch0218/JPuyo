@@ -18,7 +18,6 @@ import me.ipodtouch0218.java2dengine.display.sprite.SpriteAnimation;
 import me.ipodtouch0218.java2dengine.display.sprite.SpriteSheet;
 import me.ipodtouch0218.java2dengine.input.InputHandler;
 import me.ipodtouch0218.java2dengine.object.GameObject;
-import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 
 public class PlayerManager extends GameObject {
 	
@@ -31,8 +30,8 @@ public class PlayerManager extends GameObject {
 	
 	private static final SpriteSheet batteryIndicators = new SpriteSheet("ui/board/controller/battery-indicators.png", 10, 16);
 	private static final SpriteSheet playerIndicators = new SpriteSheet("ui/board/controller/player-indicators.png", 16, 16);
-	private static final GameSprite connectScreen = new GameSprite("ui/board/controller/connectscreen.png");
-	private static final GameSprite connectScreenBig = new GameSprite("ui/board/controller/connectscreenlarge.png");
+	private static final GameSprite connectScreen = new GameSprite("ui/board/controller/connectscreen.png", false);
+	private static final GameSprite connectScreenBig = new GameSprite("ui/board/controller/connectscreenlarge.png", false);
 	
 	private static Object[] plsprites = {
 		playerIndicators.getSprite(1, 0),
@@ -58,18 +57,21 @@ public class PlayerManager extends GameObject {
 		plsprites[7] = new SpriteAnimation(new GameSprite[]{(GameSprite) plsprites[3],player0}, 3);
 	}
 	
-	private static final GameSprite full = new GameSprite("ui/board/controller/joycon-full.png");
-	private static final GameSprite left = new GameSprite("ui/board/controller/joycon-left.png");
-	private static final GameSprite right = new GameSprite("ui/board/controller/joycon-right.png");
-	private static final GameSprite keyboard = new GameSprite("ui/board/controller/keyboard.png");
-	private static final GameSprite keyboardInverted = new GameSprite("ui/board/controller/keyboard_inverted.png");
+	private static final GameSprite full = new GameSprite("ui/board/controller/joycon-full.png", false);
+	private static final GameSprite left = new GameSprite("ui/board/controller/joycon-left.png", false);
+	private static final GameSprite right = new GameSprite("ui/board/controller/joycon-right.png", false);
+	private static final GameSprite keyboard = new GameSprite("ui/board/controller/keyboard.png", false);
+	private static final GameSprite keyboardInverted = new GameSprite("ui/board/controller/keyboard_inverted.png", false);
 	
 	private static final Controls dummy = new Controls(0,0,0,0,0,0);
 	private static PlayerManager instance;
+	
 	private ArrayList<Controls> connectedControllers = new ArrayList<>();
 	private ArrayList<Controls> players = new ArrayList<>();
+	private Runnable onComplete;
 	
 	public PlayerManager() {
+		
 		instance = this;
 		boolean continueLoop = true;
 		while (continueLoop) {
@@ -93,11 +95,10 @@ public class PlayerManager extends GameObject {
 		}
 		
 		for (Controls c : keyboardControls) {
-			GameEngine.getInstance().addGameObject(c);
+			GameEngine.addGameObject(c);
 		}
-		
 		for (Controls cont : connectedControllers) {
-			GameEngine.getInstance().addGameObject(cont);
+			GameEngine.addGameObject(cont);
 		}
 	}
 	
@@ -130,13 +131,16 @@ public class PlayerManager extends GameObject {
 		checkForConfirm();
 		
 		checkForJoyconPlayers();
-		
 		checkForKeyboardPlayers();
 	}
 	private void checkForConfirm() {
 		if (getPlayers() >= requiredPlayers) {
 			if (getMainControl().menuEnter) {
 				configure = false;
+				if (onComplete != null) {
+					onComplete.run();
+					onComplete = null;
+				}
 			}
 		}
 	}
@@ -187,7 +191,7 @@ public class PlayerManager extends GameObject {
 							}
 						}
 					}
-					addPlayer(PuyoGameMain.getGameEngine().addGameObject(new DualJoyconControls((left ? pairPartner : jc), (left ? jc : pairPartner))));
+					addPlayer(GameEngine.addGameObject(new DualJoyconControls((left ? pairPartner : jc), (left ? jc : pairPartner))));
 					readyForPair = false;
 					pairPartner = null;
 				} else {
@@ -242,7 +246,7 @@ public class PlayerManager extends GameObject {
 		keyboardPlayers = 0;
 		for (Controls cons : players) {
 			if (cons instanceof DualJoyconControls) {
-				PuyoGameMain.getGameEngine().removeGameObject(cons);
+				GameEngine.removeGameObject(cons);
 				continue;
 			} else if (cons instanceof JoyconControls) {
 				((JoyconControls) cons).setRotated(true);
@@ -252,6 +256,10 @@ public class PlayerManager extends GameObject {
 			cons.setPlayer(0);
 		}
 		players.clear();
+	}
+	public void configure(int value, Runnable runnable) {
+		configure(value);
+		onComplete = runnable;
 	}
 	
 	//getplayer controls

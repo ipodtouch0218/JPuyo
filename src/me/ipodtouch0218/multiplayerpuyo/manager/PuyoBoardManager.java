@@ -4,9 +4,9 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.display.GameRenderer;
 import me.ipodtouch0218.java2dengine.display.GameWindow;
 import me.ipodtouch0218.java2dengine.display.sprite.GameSprite;
@@ -17,14 +17,16 @@ import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
 import me.ipodtouch0218.multiplayerpuyo.misc.Gamemodes;
 import me.ipodtouch0218.multiplayerpuyo.misc.Gamemodes.Gamemode;
+import me.ipodtouch0218.multiplayerpuyo.misc.GarbageSenderStatus;
 import me.ipodtouch0218.multiplayerpuyo.misc.PuyoCharacter.CharacterPose;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjCharacterSelect;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjCountdown;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjGarbageIndicator;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoFeverBoard;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoIceBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjSPGarbageIndicator;
+import me.ipodtouch0218.multiplayerpuyo.objects.ObjTextDisplay;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPartyBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoFeverBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.senders.ParticleGarbageSender;
 import me.ipodtouch0218.multiplayerpuyo.sound.CharacterSounds;
 import me.ipodtouch0218.multiplayerpuyo.sound.GameMusic;
@@ -70,7 +72,7 @@ public class PuyoBoardManager extends GameObject {
 			pauseSprites[x] = sheet.getSprite(x, 0);
 		}
 	}
-	private static final GameSprite background = new GameSprite("ui/background.png");
+	private static final GameSprite background = new GameSprite("ui/background.png", false);
 	////////////////////
 	
 	private Gamemode gamemode;
@@ -84,7 +86,6 @@ public class PuyoBoardManager extends GameObject {
 	private int width;
 	private int height;
 	private boolean split;
-	private boolean verticalFlip;
 	private int puyoColors = 4; 
 	private boolean doublenext = true;
 	private boolean offset = true;
@@ -92,11 +93,11 @@ public class PuyoBoardManager extends GameObject {
 
 	//--ingame round vars
 	private boolean gameStarted;
-	private ArrayList<PuyoType> nextPuyos;
-	private HashMap<ObjPuyoBoard, Integer> validationNeeded = new HashMap<>();
+	private ArrayList<PuyoType> nextPuyos = new ArrayList<>();
 	private double speedTimer = 0;
 	private int dropSpeed;
 	private boolean inFever;
+	private double timer = -1;
 	
 	private ObjGarbageIndicator spIndicator;
 	
@@ -105,9 +106,11 @@ public class PuyoBoardManager extends GameObject {
 	private int winsUntilVictory = 2;
 	
 	//--sound vars
-	private GameMusic currentMusic = GameMusic.CLASSIC;
+	private GameMusic currentMusic = GameMusic.LAST_FROM_TSU;
 	
 	private long musicResumePoint;
+	private double highestPanic;
+	private ObjPuyoBoard panicingBoard;
 	private boolean isPanicing = false;
 	
 	//--key vars
@@ -119,82 +122,84 @@ public class PuyoBoardManager extends GameObject {
 		this.controls = controls;
 		this.gamemode = gamemode;
 		GameRenderer.setBackground(background.getImage());
+		if (gamemode == Gamemodes.PARTY) {
+			timer = 120.9999;
+		}
 	}
 	//////
 	@Override
 	public void tick(double delta) {
 		if (gameOver) { return; }
+		keyCheck();
 		if (pause) { 
 			sintimer+=delta*1.5d;
 			pausedKeyCheck(delta);
 			return; 
 		}
-		keyCheck();
 		feverMusicCheck();
-		panicMusicCheck();
 	
 		if (!gameStarted) { return; }
 		
 		speedTimer+=delta;
 		dropSpeed = (int) Math.max(Math.min(30, ((speedTimer*-0.09)+30)), 5);
-	
-		gameOverCheck();
-	}
-	
-	private void panicMusicCheck() {
-		if (!inFever) {
-			GameMusic.FEVER.stop();
-			
-			double highestPanic = 0;
-			for (ObjPuyoBoard board : boards) {
-				if (board.isGameOver()) { continue; }
-				highestPanic = Math.max(board.getPanic(), highestPanic);
-			}
-			if (!isPanicing && highestPanic >= 0.75) {
-				isPanicing = true;
-				musicResumePoint = currentMusic.getSound().getFramePosition();
-				currentMusic.stop();
-				GameMusic.PANIC.start(0);
-			}
-			if (isPanicing && highestPanic <= 0.55) {
-				isPanicing = false;
-				GameMusic.PANIC.stop();
-				currentMusic.start(musicResumePoint);
+		if (gamemode == Gamemodes.PARTY) {
+			timer -= delta;
+			if (timer <= 0) {
+				gamemode.onTimerEnd(this);
 			}
 		}
 		
+		gameOverCheck();
+	}
+	
+	public void checkPanic(ObjPuyoBoard b, double panic) {
+		if (highestPanic > panic) {
+			if (panicingBoard == b || panicingBoard == null) {
+				highestPanic = panic;
+			}
+		} else if (panic > highestPanic) {
+			highestPanic = panic;
+			panicingBoard = b;
+		}
+		
+		if (inFever) { return; }
+		if (isPanicing && highestPanic <= 0.5) {
+			isPanicing = false;
+			GameMusic.PANIC.getSound().stop();
+			currentMusic.start(musicResumePoint);
+		} else if (!isPanicing && highestPanic >= 0.7) {
+			isPanicing = true;
+			currentMusic.stop();
+			GameMusic.PANIC.start(0);
+		}
 	}
 	
 	private void feverMusicCheck() {
-		if (gamemode.isFever()) {
-			
-			if (currentMusic.getSound().isPlaying() || GameMusic.PANIC.getSound().isPlaying()) {
-				for (ObjPuyoBoard b :  boards) {
-					ObjPuyoFeverBoard fb = (ObjPuyoFeverBoard) b;
-					if (fb.getFeverManager().isInFever()) {
-						inFever = true;
-						
-						if (currentMusic.getSound().isPlaying()) {
-							musicResumePoint = currentMusic.getSound().getFramePosition();
-							currentMusic.stop();
-						} else {
-							GameMusic.PANIC.stop();
-						}
-						
-						GameMusic.FEVER.start(0);
-						break;
+		if (!gamemode.getGamemodeSettings().fever) { return; }
+
+		if (currentMusic.getSound().isPlaying() || GameMusic.PANIC.getSound().isPlaying()) {
+			for (ObjPuyoBoard b :  boards) {
+				ObjPuyoFeverBoard fb = (ObjPuyoFeverBoard) b;
+				if (fb.getFeverManager().isInFever()) {
+					inFever = true;
+					
+					if (currentMusic.getSound().isPlaying()) {
+//						musicResumePoint = currentMusic.getSound().getFramePosition();
+						currentMusic.stop();
 					}
-				}
-			} else {
-				for (ObjPuyoBoard b :  boards) {
-					ObjPuyoFeverBoard fb = (ObjPuyoFeverBoard) b;
-					if (fb.getFeverManager().isInFever()) {
-						inFever = true;
-						break;
-					}
+					GameMusic.PANIC.stop();
+					GameMusic.FEVER.start(0);
+					break;
 				}
 			}
-			
+		} else {
+			for (ObjPuyoBoard b :  boards) {
+				ObjPuyoFeverBoard fb = (ObjPuyoFeverBoard) b;
+				if (fb.getFeverManager().isInFever()) {
+					inFever = true;
+					break;
+				}
+			}
 		}
 	}
 	private double inputtimer = 0;
@@ -248,114 +253,119 @@ public class PuyoBoardManager extends GameObject {
 			PuyoGameMain.screenshot();
 		}
 		f5down = InputHandler.isKeyPressed(KeyEvent.VK_F5);
-		if (controlpause && !escdown) {
+		if (controlpause && !escdown && GameEngine.getAllGameObjects(ObjCharacterSelect.class).isEmpty()) {
 			pause = !pause;
 		} 
 		escdown = controlpause;
 	}
 	
 	private void gameOverCheck() {
-		if (gameStarted && (getRemainingBoards() <= (gamemode.isSingleplayer() ? 0 : 1))) {
+		if (!gameStarted) { return; }
+		if (!(getRemainingBoards() <= (gamemode.isSingleplayer() ? 0 : 1))) { return; }
+		for (ObjPuyoBoard b : boards) {
+			if (b.isMidChain() && !b.isGameOver()) {
+				return;
+			}
+		}
+		
+		gameOver = true;
+		gameStarted = false;
+		if (gamemode.isSingleplayer()) {
+			currentMusic.stop();
+			GameMusic.FEVER.stop();
+		}
+			
+		PuyoGameMain.getThreadPool().execute(() -> {
+			gamemode.onRoundOver(PuyoBoardManager.this);
 			for (ObjPuyoBoard b : boards) {
-				if (b.isMidChain() && !b.isGameOver()) {
-					return;
-					//dont gameover if mid combo
+				if (b.getDropper() == null) { continue; }
+				b.getDropper().delete();
+				if (!b.isGameOver()) {
+					b.poseCharacter(CharacterPose.WIN);
 				}
 			}
-			gameOver = true;
-			new Thread() {
-				public void run() {
-					gamemode.onRoundOver(PuyoBoardManager.this);
-					for (ObjPuyoBoard b : boards) {
-						if (b.getDropper() == null) { continue; }
-						b.getDropper().delete();
-						if (!b.isGameOver()) {
-							b.poseCharacter(CharacterPose.WIN);
-						}
-					}
-					
-					try {
-						Thread.sleep(1500);
-					} catch (InterruptedException e) {}
-					boolean cont = true;
-					while (cont) {
-						cont = false;
-						forloop:
-						for (ObjPuyoBoard b : boards) {
-							if (b.getCharacter().getSound(CharacterSounds.LOSE).isPlaying()) {
-								cont = true;
-								break forloop;
-							}
-						}
-						try {
-							Thread.sleep(100);
-						} catch (InterruptedException e) {}
-					}
-					
-					boolean sound = false;
-					boolean winner = false;
-					for (ObjPuyoBoard b : boards) {
-						if (!b.isGameOver()) {
-							b.setWins(b.getWins()+1);
-							if (b.getWins() >= winsUntilVictory) {
-								winner = true;
-							}
-							if (!sound) {
-								sound=true;
-								GameSounds.FEVER_METER_FILL.play();
-							}
-							b.getCharacter().getSound(CharacterSounds.WIN).play();
-						}
-					}
-					
-					cont = true;
-					while (cont) {
-						cont = false;
-						forloop:
-						for (ObjPuyoBoard b : boards) {
-							if (b.getCharacter().getSound(CharacterSounds.WIN).isPlaying()) {
-								cont = true;
-								break forloop;
-							}
-						}
-						try {
-							Thread.sleep(100);
-						} catch (InterruptedException e) {}
-					}
-					try {
-						Thread.sleep(1000);
-					} catch (InterruptedException e) {}
-					
-					if (winner || gamemode.isSingleplayer()) {
-						try {
-							Thread.sleep(2*1000);
-						} catch (InterruptedException e) {}
-						gameOver();
-					} else {
-						countDown();
+			
+			try {
+				Thread.sleep(1500);
+			} catch (InterruptedException e) {}
+			boolean cont = true;
+			while (cont) {
+				cont = false;
+				forloop:
+				for (ObjPuyoBoard b : boards) {
+					if (CharacterSounds.LOSE.getSound(b.getCharacter(), b.isCharacterAlt()).isPlaying()) {
+						cont = true;
+						break forloop;
 					}
 				}
-			}.start();
-		}
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {}
+			}
+			
+			boolean sound = false;
+			boolean winner = false;
+			for (ObjPuyoBoard b : boards) {
+				if (!b.isGameOver()) {
+					b.setWins(b.getWins()+1);
+					if (b.getWins() >= winsUntilVictory) {
+						winner = true;
+					}
+					if (!sound) {
+						sound=true;
+						GameSounds.FEVER_METER_FILL.play();
+					}
+					CharacterSounds.WIN.getSound(b.getCharacter(), b.isCharacterAlt()).play();
+				}
+			}
+			
+			cont = true;
+			while (cont) {
+				cont = false;
+				forloop:
+				for (ObjPuyoBoard b : boards) {
+					if (CharacterSounds.WIN.getSound(b.getCharacter(), b.isCharacterAlt()).isPlaying()) {
+						cont = true;
+						break forloop;
+					}
+				}
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {}
+			}
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {}
+			
+			if (winner || gamemode.isSingleplayer()) {
+				try {
+					Thread.sleep(2*1000);
+				} catch (InterruptedException e) {}
+				gameOver();
+			} else {
+				countDown();
+			}
+		});
+		
 	}
 	
 	private void gameOver() {
 		for (ObjPuyoBoard board : boards) {
-			PuyoGameMain.getGameEngine().removeGameObject(board);
+			GameEngine.removeGameObject(board);
 		}
 		PuyoGameMain.getMenus().show();
-		PuyoGameMain.getGameEngine().removeGameObject(spIndicator);
-		PuyoGameMain.getGameEngine().removeGameObject(this);
+		GameEngine.removeGameObject(spIndicator);
+		GameEngine.removeGameObject(this);
 		GameRenderer.removeBackground();
 		Runtime.getRuntime().gc();
 	}
 	
 	public ObjPuyoBoard createBoard(int width, int height, int player) {
 		ObjPuyoBoard board = null;
-		if (gamemode.isFever()) {
+		if (gamemode.getGamemodeSettings().fever) {
 			board = new ObjPuyoFeverBoard(width, height, controls.getPlayer(player+1), this, player);
-		} else if (gamemode == Gamemodes.ICE_PUYO) {
-			board = new ObjPuyoIceBoard(width, height, controls.getPlayer(player+1), this, player);
+		} else if (gamemode == Gamemodes.PARTY) {
+			board = new ObjPartyBoard(width, height, controls.getPlayer(player+1), this, player);
 		} else {
 			board = new ObjPuyoBoard(width, height, controls.getPlayer(player+1), this, player);
 		}
@@ -367,32 +377,44 @@ public class PuyoBoardManager extends GameObject {
 		boards.add(board);
 		width = board.getWidth();
 		height = board.getHeight();
-		PuyoGameMain.getGameEngine().addGameObject(board);
+		GameEngine.addGameObject(board);
 	}
 	
-	public void sendGarbage(ObjPuyoBoard board, int amount, boolean sendParticle, PuyoType type, int consecutive) {
-		if (amount <= 0) { return; }
+	public ParticleGarbageSender[] sendGarbage(GarbageSenderStatus board, int amount, boolean sendParticle, PuyoType type, boolean red, int consecutive) {
+		if (amount <= 0) { return null; }
 		if (gamemode.isSingleplayer()) {
 			if (sendParticle) {
-				PuyoGameMain.getGameEngine().addGameObject(new ParticleGarbageSender(spIndicator, amount, consecutive, type), board.getX()+(width*16)/2, board.getY()+(height*16)/2);
+				return new ParticleGarbageSender[]{GameEngine.addGameObject(new ParticleGarbageSender(spIndicator, board, amount, consecutive, type, red), board.getBoard().getX()+(width*16)/2, board.getBoard().getY()+(height*16)/2)};
 			}
-			return;
+			return null;
 		}
 		
 		int remainingBoards = getRemainingBoards();
-		if (remainingBoards-1 <= 0) { return; } 
+		if (remainingBoards-1 <= 0) { return null; } 
 
 		if (split) {
 			amount /= (remainingBoards-1);
 		}
 		if (sendParticle) {
+			ParticleGarbageSender senders[] = new ParticleGarbageSender[remainingBoards-1];
+			int count = 0;
 			for (ObjPuyoBoard otherBoard : boards) {
-				if (otherBoard == board) continue;
-				PuyoGameMain.getGameEngine().addGameObject(new ParticleGarbageSender(otherBoard, amount, consecutive, type), board.getX()+(board.getWidth()*16)/2, board.getY()+(board.getHeight()*16)/2);
+				if (otherBoard == board.getBoard()) continue;
+				ParticleGarbageSender sendr = GameEngine.addGameObject(new ParticleGarbageSender(otherBoard, board, amount, consecutive, type, red), board.getBoard().getX()+(board.getBoard().getWidth()*16)/2, board.getBoard().getY()+(board.getBoard().getHeight()*16)/2);
+				board.senders.add(sendr);
+				senders[count] = sendr;
+				count++;
 			}
+			return senders;
 		}
-		int newamt = amount + validationNeeded.getOrDefault(board, 0);
-		validationNeeded.put(board, newamt);
+		return null;
+	}
+	
+	public void verifyGarbage(ObjPuyoBoard board) {
+		for (ObjPuyoBoard other : boards) {
+			if (other == board) { continue; }
+			other.verifyGarbage(board);
+		}
 	}
 	
 	public PuyoType getNextPuyo(ObjPuyoBoard board) {
@@ -406,7 +428,7 @@ public class PuyoBoardManager extends GameObject {
 				entry.puyoOrderPos--;
 			}
 		}
-		while (nextPuyos.size() <= board.puyoOrderPos) {
+		while (nextPuyos.size() <= board.puyoOrderPos+4) {
 			nextPuyos.add(getRandomPuyo());
 		}
 		PuyoType next = nextPuyos.get(board.puyoOrderPos);
@@ -427,80 +449,74 @@ public class PuyoBoardManager extends GameObject {
 		return remainingBoards;
 	}
 	
-	private static final GameSprite[] countdownSprites = {new GameSprite("ui/board/countdown-3.png"), 
-														  new GameSprite("ui/board/countdown-2.png"),
-														  new GameSprite("ui/board/countdown-1.png"),
-														  new GameSprite("ui/board/countdown-go.png")};
 	private boolean choosechars = false;
 	public void countDown() {
 		if (!currentMusic.getSound().isPlaying()) {
 			currentMusic.start(0);
 		}
-		nextPuyos = new ArrayList<>();
-		new Thread() {
-			public void run() {
-				gameOver = false;
-				GameRenderer.setActiveCamera(null);
-				int count = 0;
-				for (ObjPuyoBoard board : boards) {
-					board.setLocation(GameWindow.getSetWidth()/2+(((double)count-boards.size()/2)*((width*16)+50)), 80);
-					board.reset();
-					board.createObjects();
-					count++;
-				}
-				if (gamemode.isSingleplayer()) {
-					ObjPuyoBoard spBoard = boards.get(0);
-					spBoard.setLocation(GameWindow.getSetWidth()/2 - (width*16)+50, 80);
-					spIndicator = PuyoGameMain.getGameEngine().addGameObject(new ObjSPGarbageIndicator(), GameWindow.getSetWidth()/2 + (width*16+50), 80+height*16);
-				}
-				if (boards.get(0).getCharacter() == null || choosechars) {
-					ObjCharacterSelect sel = PuyoGameMain.getGameEngine().addGameObject(new ObjCharacterSelect(boards));
-					while(!sel.allConfirmed()) {
-						try {
-							Thread.sleep(100);
-						} catch (InterruptedException e) {}
-					}
-					choosechars = false;
-					PuyoGameMain.getGameEngine().removeGameObject(sel);
-				}
-
-				gamemode.onRoundReset(PuyoBoardManager.this);
-				
-				ObjCountdown cdObject = PuyoGameMain.getGameEngine().addGameObject(new ObjCountdown(), GameWindow.getSetWidth()/2-16, GameWindow.getSetHeight()/4);
-				
-				for (int i = 0; i < 4; i++) {
-					double second = 1;
-					final int j = i;
-					cdObject.setSprite(countdownSprites[j]);
-					if (i == 3) {
-						cdObject.setX(cdObject.getX());
-					}
-					while (second > 0) {
-						try {
-							Thread.sleep(50);
-						} catch (InterruptedException e) {}
-						second -= 0.05;
-						while (pause) { 
-							try {
-								Thread.sleep(50);
-							} catch (InterruptedException e) {}
-						}
-					}
-				}
-				cdObject.shrink();
-				startGame();
+		nextPuyos.clear();
+		gameOver = false;
+		GameRenderer.setActiveCamera(null);
+		
+		if (gamemode.isSingleplayer()) {
+			ObjPuyoBoard spBoard = boards.get(0);
+			spBoard.setLocation(GameWindow.getSetWidth()/2-((width*16)/2)-4, 80);
+			spIndicator = GameEngine.addGameObject(new ObjSPGarbageIndicator(), GameWindow.getSetWidth()/2 + (width*16+50), 80+height*16);
+			spBoard.createObjects();
+		} else {
+			int count = 0;
+			for (ObjPuyoBoard board : boards) {
+				int bwidth = (width*16)+(60);
+				board.setFlipped((count/(double) (boards.size())>=0.5));
+				board.setLocation(GameWindow.getSetWidth()/2-4 + (bwidth * (count-(boards.size()/2d))) + (board.isFlipped() ? 60+15 : 0), 80);
+				board.reset();
+				board.createObjects();
+				count++;
 			}
-		}.start();
+		}
+		
+		if (boards.get(0).getCharacter() == null || choosechars) {
+			PuyoGameMain.getThreadPool().execute(() -> {
+				ObjCharacterSelect charSelect = GameEngine.addGameObject(new ObjCharacterSelect(boards));
+				while (!charSelect.allConfirmed()) {
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {}
+				}
+				GameEngine.removeGameObject(charSelect);
+				startRound();
+			});
+			choosechars = false;
+		} else {
+			startRound();
+		}
 	}
-	private void startGame() {
+	private void startRound() {
+		gamemode.onRoundReset(PuyoBoardManager.this);
+		GameEngine.addGameObject(new ObjCountdown(this), GameWindow.getSetWidth()/2, GameWindow.getSetHeight()/4); //starts countdown
+		
+		PuyoGameMain.getThreadPool().execute(() -> {
+			for (ObjPuyoBoard board : boards) {
+				board.getCharacter().loadSounds(board.isCharacterAlt());
+			}
+		}); //load sounds async.
+		
+		GameMusic.PANIC.stop();
+	}
+	public void startGame() {
 		gamemode.onRoundStart(this);
-		boards.forEach(brd -> brd.setReadyForPuyo(true));
 		gameStarted = true;
 	}
 	
 	private double sintimer;
 	@Override
 	public void render(Graphics2D g) {
+		g.setColor(Color.BLACK);
+		if (timer != -1) {
+			g.setFont(g.getFont().deriveFont(20f));
+			ObjTextDisplay.drawStringCentered(g, ((int) timer)+"", GameWindow.getSetWidth()/2, 50);
+		}
+		
 		if (pause) {
 			g.setColor(new Color(0,0,0,127));
 			g.fillRect(0, 0, GameWindow.getSetWidth(), GameWindow.getSetHeight());
@@ -525,12 +541,10 @@ public class PuyoBoardManager extends GameObject {
 		}
 	}
 	
-	
 	public boolean isNextDouble() { return doublenext; }
 	public int getHeight() { return height; }
 	public int getWidth() { return width; }
 	public int getDropSpeed() { return dropSpeed; }
-	public boolean getVerticalFlip() { return verticalFlip; }
 	public static boolean isPaused() { return pause; }
 	public List<ObjPuyoBoard> getBoards() { return boards; }
 	public boolean isOffsetEnabled() { return offset; }
@@ -538,13 +552,14 @@ public class PuyoBoardManager extends GameObject {
 	public Gamemode getGamemode() { return gamemode; }
 	public int getWinsUntilVictory() { return winsUntilVictory; }
 	public boolean getInstaDrop() { return instadrop; }
+	public ArrayList<PuyoType> getPuyoOrder() { return nextPuyos; }
 	
 	public void setOffset(boolean value) { offset = value; }
 	public void setNextDouble(boolean value) { doublenext = value; }
-	public void setVerticalFlip(boolean value) { verticalFlip = value; }
 	public void setSplitGarbage(boolean value) { split = value; }
 	public void setPuyoColorAmount(int value) { puyoColors = value; }
-
+	public void setWinsUntilVictory(int value) { winsUntilVictory = value; }
+	
 	public int getPlayersRemaining() {
 		int count = 0;
 		for (ObjPuyoBoard board : boards) {
@@ -558,15 +573,6 @@ public class PuyoBoardManager extends GameObject {
 		return boards.size();
 	}
 	public boolean hasStarted() { return gameStarted; }
-
-	public void verifyGarbage(ObjPuyoBoard send) {
-		int amt = validationNeeded.getOrDefault(send, 0);
-		for (ObjPuyoBoard board : boards) {
-			if (send == board) { continue; }
-			board.addDroppableGarbage(amt);
-		}
-		validationNeeded.put(send, 0);
-	}
 	
 	///---static---///
 	private abstract class PauseButton {

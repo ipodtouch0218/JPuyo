@@ -6,6 +6,8 @@ import java.awt.FontFormatException;
 import java.io.File;
 import java.io.IOException;
 import java.util.Calendar;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.imageio.ImageIO;
 
@@ -33,23 +35,25 @@ import me.ipodtouch0218.multiplayerpuyo.objects.ObjGarbageIndicator;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjGarbageIndicator.GarbageSprites;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjTextDisplay;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticleFeverIcon;
+import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticlePuyoPop;
+import me.ipodtouch0218.multiplayerpuyo.objects.particle.senders.ParticleSender;
 import me.ipodtouch0218.multiplayerpuyo.sound.GameSounds;
 import me.ipodtouch0218.multiplayerpuyo.sound.Soundpack;
 
 public class PuyoGameMain {
-	
-	private static GameEngine engine;
+
 	public static Font puyofont;
 	public static Font scorefont;
 	private static MenuManager menus;
 	private static PlayerManager playerManager;
+	private static ExecutorService pool = Executors.newCachedThreadPool();
 	
 	public static RenderQuality quality  = RenderQuality.HIGH;
 	
 	public static void main(String[] args) {
 		try {
 			puyofont = Font.createFont(Font.TRUETYPE_FONT, PuyoGameMain.class.getResourceAsStream("/res/sprites/ui/puyo.ttf")).deriveFont(12f);
-			scorefont = Font.createFont(Font.TRUETYPE_FONT, PuyoGameMain.class.getResourceAsStream("/res/sprites/ui/score.ttf")).deriveFont(12f);
+			scorefont = Font.createFont(Font.TRUETYPE_FONT, PuyoGameMain.class.getResourceAsStream("/res/sprites/ui/score.ttf")).deriveFont(24f);
 		} catch (FontFormatException | IOException e) {
 			e.printStackTrace();
 		}
@@ -59,34 +63,36 @@ public class PuyoGameMain {
 	
 	public PuyoGameMain() {
 		System.setProperty("sun.java2d.opengl", "true");
-		engine = new GameEngine(60);	
-		
 		GameWindow.setWindowName("Puyo Puyo: Java");
 		GameWindow.setWindowSize(640, 360);
 		GameWindow.setScaleSize(2, 2);
-		engine.start();
-		
-		loadSoundsAndSprites();
+		GameEngine.setMaxFPS(60);
+		GameEngine.start();
 		GameWindow.center();
 		
+		loadSoundsAndSprites();
+		
 		playerManager = new PlayerManager();
-		engine.addGameObject(playerManager);
+		GameEngine.addGameObject(playerManager);
 		playerManager.configure(1);
+		while (playerManager.isConfiguring()) {
+			try { Thread.sleep(200); } catch (Exception e) {}
+		}
 		
 		menus = new MenuManager();
 		addMenuElements();
 		menus.openNewPanel(menus.getPanelFromString("main_menu"));
-		engine.addGameObject(menus);
+		GameEngine.addGameObject(menus);
 		
-		GameRenderer.setRenderPriority(ObjCharacterSelect.class, ObjTextDisplay.class, ParticleFeverIcon.class, PlayerManager.class, ObjCountdown.class, PuyoBoardManager.class, ObjGarbageIndicator.class);
+		GameRenderer.setRenderPriority(ObjCharacterSelect.class, ParticleSender.class, ObjCharacterSelect.class, ParticlePuyoPop.class, ObjTextDisplay.class, ParticleFeverIcon.class, PlayerManager.class, ObjCountdown.class, PuyoBoardManager.class, ObjGarbageIndicator.class);
 		GameSounds.setSoundpack(Soundpack.CLASSIC);
 		
 		
-		engine.addGameObject(new ObjTextDisplay("", 0, 0, -1) {
+		GameEngine.addGameObject(new ObjTextDisplay("", 0, 0, -1) {
 			public void tick(double delta) {
-				double fps = Math.round(engine.getFPS()*10d)/10d;
+				double fps = Math.round(GameEngine.getFPS()*10d)/10d;
 				setDisplay(fps + " fps");
-				double sc = (engine.getMaxFPS() == 0 ? 60 : engine.getMaxFPS());
+				double sc = (GameEngine.getMaxFPS() == 0 ? 60 : GameEngine.getMaxFPS());
 				fps = Math.min(fps,sc);
 				setColor(new Color((int) (127+(128d*(fps/sc))), (int) (255*(fps/sc)), (int) (255*(fps/sc))));
 			}
@@ -103,9 +109,9 @@ public class PuyoGameMain {
 		masterBar.setHeight(20);
 		middleBar.setHeight(20);
 		ObjTextDisplay textDisplay = new ObjTextDisplay("", 0, 0, -1, 12f, Color.WHITE);
-		engine.addGameObject(masterBar, (GameWindow.getSetWidth()-masterBar.getLength())/2, (GameWindow.getSetHeight())/2);
-		engine.addGameObject(middleBar, (GameWindow.getSetWidth()-middleBar.getLength())/2, (GameWindow.getSetHeight())/2+50);
-		engine.addGameObject(textDisplay, GameWindow.getSetWidth()/2, GameWindow.getSetHeight()/2+100);
+		GameEngine.addGameObject(masterBar, (GameWindow.getSetWidth()-masterBar.getLength())/2, (GameWindow.getSetHeight())/2);
+		GameEngine.addGameObject(middleBar, (GameWindow.getSetWidth()-middleBar.getLength())/2, (GameWindow.getSetHeight())/2+50);
+		GameEngine.addGameObject(textDisplay, GameWindow.getSetWidth()/2, GameWindow.getSetHeight()/2+100);
 		
 		for (PuyoType types : PuyoType.values()) {
 			middleBar.setMaxValue(PuyoSprites.values().length);
@@ -138,19 +144,17 @@ public class PuyoGameMain {
 			}
 		});
 		
-		engine.removeGameObject(masterBar);
-		engine.removeGameObject(middleBar);
-		engine.removeGameObject(textDisplay);
+		GameEngine.removeGameObject(masterBar);
+		GameEngine.removeGameObject(middleBar);
+		GameEngine.removeGameObject(textDisplay);
 	}
 	
 	private void applySettings(PuyoBoardManager bm) {
-		bm.setVerticalFlip(verticalFlip.getValue());
 		bm.setNextDouble(doubleNextDisplay.getValue());
 	}
 	
 	private MenuArrows boardWidth = new MenuArrows((250/2)-96, 40, "Board Width:", 3, 20, 6, 135);
 	private MenuArrows boardHeight = new MenuArrows((250/2)-96, 90, "Board Height:", 2, 30, 12, 135);
-	private MenuCheckbox verticalFlip = new MenuCheckbox(450, 40, "Vertical Turning", 140, true);
 	private MenuCheckbox invertControls = new MenuCheckbox(450, 160-70, "Invert Controls", 140, false);
 	private MenuCheckbox doubleNextDisplay = new MenuCheckbox(450, 230-90, "Double Next Display", 140, true);
 	private void addMenuElements() {	
@@ -168,7 +172,7 @@ public class PuyoGameMain {
 				};
 				elements[0][3] = new MenuArrows((250/2)-96, 190, "Max FPS:", 0, 300, 60, 135, 5) {
 					public void onValueChange() {
-						engine.setMaxFps(value);
+						GameEngine.setMaxFPS(value);
 						if (value == 0) {
 							display = "Max FPS: Unlimited";
 						} else {
@@ -177,11 +181,11 @@ public class PuyoGameMain {
 					}
 				};
 				
-				elements[1][0] = verticalFlip;
+				elements[1][0] = invertControls;
 				elements[1][1] = invertControls;
 				elements[1][2] = doubleNextDisplay;
 				
-				elements[0][4] = new MenuButton(GameWindow.getSetWidth()/2-50, 260, new GameSprite("ui/menu/back-wide-selected.png"), new GameSprite("ui/menu/back-wide-deselected.png")) {
+				elements[0][4] = new MenuButton(GameWindow.getSetWidth()/2-50, 260, new GameSprite("ui/menu/back-wide-selected.png", false), new GameSprite("ui/menu/back-wide-deselected.png", false)) {
 					public void onClick() {
 						menus.openPreviousPanel();
 					}
@@ -199,18 +203,17 @@ public class PuyoGameMain {
 				elements[0][0] = gamemode;
 				elements[1][0] = gamemode;
 				
-				elements[0][1] = new MenuButton((250/2)-64, 150, new GameSprite("ui/menu/main/button-start-selected.png"), new GameSprite("ui/menu/main/button-start.png")) {
+				elements[0][1] = new MenuButton((250/2)-64, 150, new GameSprite("ui/menu/main/button-start-selected.png", false), new GameSprite("ui/menu/main/button-start.png", false)) {
 					public void onClick() {
 						Gamemode gm = gamemode.getValue();
-						PuyoBoardManager bm = new PuyoBoardManager(playerManager, gm);
-						PuyoGameMain.getGameEngine().addGameObject(bm);
+						PuyoBoardManager bm = GameEngine.addGameObject(new PuyoBoardManager(playerManager, gm));
 						gm.createBoards(bm, 1, boardWidth.getValue(), boardHeight.getValue());
-						bm.countDown();
 						menus.hide();
+						bm.countDown();
 					}
 				};
 				
-				elements[1][1] = new MenuButton((250/2), 150, new GameSprite("ui/menu/back-wide-selected.png"), new GameSprite("ui/menu/back-wide-deselected.png")) {
+				elements[1][1] = new MenuButton((250/2), 150, new GameSprite("ui/menu/back-wide-selected.png", false), new GameSprite("ui/menu/back-wide-deselected.png", false)) {
 					public void onClick() {
 						menus.openPreviousPanel();
 					}
@@ -222,7 +225,7 @@ public class PuyoGameMain {
 			public void createElements() { 
 				elements = new MenuElement[2][4];
 				
-				MenuItemArrows<Gamemode> gamemode = new MenuItemArrows<Gamemode>((250/2)-97, 100, 1, 150, new Gamemode[]{Gamemodes.TSU, Gamemodes.FEVER, Gamemodes.NONSTOP_FEVER, Gamemodes.ICE_PUYO});
+				MenuItemArrows<Gamemode> gamemode = new MenuItemArrows<Gamemode>((250/2)-97, 100, 1, 150, new Gamemode[]{Gamemodes.TSU, Gamemodes.FEVER, Gamemodes.NONSTOP_FEVER, Gamemodes.PARTY, Gamemodes.ICE_PUYO});
 				elements[0][0] = gamemode;
 				elements[1][0] = gamemode;
 				
@@ -236,21 +239,11 @@ public class PuyoGameMain {
 			
 				
 				
-				elements[0][3] = new MenuButton((250/2)-52, 250, new GameSprite("ui/menu/main/button-start-selected.png"), new GameSprite("ui/menu/main/button-start.png")) {
+				elements[0][3] = new MenuButton((250/2)-52, 250, new GameSprite("ui/menu/main/button-start-selected.png", false), new GameSprite("ui/menu/main/button-start.png", false)) {
 					public void onClick() {
 						
 						if (PlayerManager.getInstance().getPlayers() < players.getValue()) {
-							PlayerManager.getInstance().configure(players.getValue());
-						}
-						
-						new Thread() {
-							public void run() {
-								while (PlayerManager.getInstance().isConfiguring()) {
-									try {
-										Thread.sleep(1);
-									} catch (InterruptedException e) {}
-								}
-								
+							PlayerManager.getInstance().configure(players.getValue(), ()-> {
 								if (PlayerManager.getInstance().getPlayers() < players.getValue()) {
 									return;
 								}
@@ -258,17 +251,26 @@ public class PuyoGameMain {
 								Gamemode gm = gamemode.getValue();
 								PuyoBoardManager bm = new PuyoBoardManager(playerManager, gm);
 								gm.createBoards(bm, players.getValue(), boardWidth.getValue(), boardHeight.getValue());
-								PuyoGameMain.getGameEngine().addGameObject(bm);
+								GameEngine.addGameObject(bm);
 								applySettings(bm);
 								bm.setSplitGarbage(splitting.getValue());
-								bm.countDown();
 								menus.hide();
-							}
-						}.start();
+								bm.countDown();
+							});
+						} else {
+							Gamemode gm = gamemode.getValue();
+							PuyoBoardManager bm = new PuyoBoardManager(playerManager, gm);
+							gm.createBoards(bm, players.getValue(), boardWidth.getValue(), boardHeight.getValue());
+							GameEngine.addGameObject(bm);
+							applySettings(bm);
+							bm.setSplitGarbage(splitting.getValue());
+							menus.hide();
+							bm.countDown();
+						}
 					}
 				};
 				
-				elements[1][3] = new MenuButton((250/2), 250, new GameSprite("ui/menu/back-wide-selected.png"), new GameSprite("ui/menu/back-wide-deselected.png")) {
+				elements[1][3] = new MenuButton((250/2), 250, new GameSprite("ui/menu/back-wide-selected.png", false), new GameSprite("ui/menu/back-wide-deselected.png", false)) {
 					public void onClick() {
 						menus.openPreviousPanel();
 					}
@@ -280,19 +282,19 @@ public class PuyoGameMain {
 			public void createElements() {
 				elements = new MenuElement[2][2];
 				
-				elements[0][0] = new MenuButton((250/2)-52, 100, new GameSprite("ui/menu/start/1p-selected.png"), new GameSprite("ui/menu/start/1p-deselected.png")) {
+				elements[0][0] = new MenuButton((250/2)-52, 100, new GameSprite("ui/menu/start/1p-selected.png", false), new GameSprite("ui/menu/start/1p-deselected.png", false)) {
 					public void onClick() {
 						menus.openNewPanel(menus.getPanelFromString("singleplayer_panel"));
 					}
 				};
 				
-				elements[1][0] = new MenuButton((250/2), 100, new GameSprite("ui/menu/start/mp-selected.png"), new GameSprite("ui/menu/start/mp-deselected.png")) {
+				elements[1][0] = new MenuButton((250/2), 100, new GameSprite("ui/menu/start/mp-selected.png", false), new GameSprite("ui/menu/start/mp-deselected.png", false)) {
 					public void onClick() {
 						menus.openNewPanel(menus.getPanelFromString("multiplayer_panel"));
 					}
 				};
 				
-				MenuButton back = new MenuButton((250/2)-65, 170, new GameSprite("ui/menu/back-wide-selected.png"), new GameSprite("ui/menu/back-wide-deselected.png")) {
+				MenuButton back = new MenuButton((250/2)-65, 170, new GameSprite("ui/menu/back-wide-selected.png", false), new GameSprite("ui/menu/back-wide-deselected.png", false)) {
 					public void onClick() {
 						menus.openPreviousPanel();
 					}
@@ -308,22 +310,22 @@ public class PuyoGameMain {
 			public void createElements() {
 				elements = new MenuElement[1][4];
 				
-				elements[0][0] = new MenuButton(GameWindow.getSetWidth()/2-32, 100, new GameSprite("ui/menu/main/button-start-selected.png"), new GameSprite("ui/menu/main/button-start.png")) {
+				elements[0][0] = new MenuButton(GameWindow.getSetWidth()/2-32, 100, new GameSprite("ui/menu/main/button-start-selected.png", false), new GameSprite("ui/menu/main/button-start.png", false)) {
 					public void onClick() {	
 						menus.openNewPanel(menus.getPanelFromString("start_panel"));
 					}
 				};
-				elements[0][1] = new MenuButton(GameWindow.getSetWidth()/2-32, 150, new GameSprite("ui/menu/main/options-selected.png"), new GameSprite("ui/menu/main/options-deselected.png")) {
+				elements[0][1] = new MenuButton(GameWindow.getSetWidth()/2-32, 150, new GameSprite("ui/menu/main/options-selected.png", false), new GameSprite("ui/menu/main/options-deselected.png", false)) {
 					public void onClick() {
 						menus.openNewPanel(menus.getPanelFromString("options_panel"));
 					}
 				};
-				elements[0][2] = new MenuButton(GameWindow.getSetWidth()/2-32, 200, new GameSprite("ui/menu/main/controls-selected.png"), new GameSprite("ui/menu/main/controls-deselected.png")) {
+				elements[0][2] = new MenuButton(GameWindow.getSetWidth()/2-32, 200, new GameSprite("ui/menu/main/controls-selected.png", false), new GameSprite("ui/menu/main/controls-deselected.png", false)) {
 					public void onClick() {
 						PlayerManager.getInstance().configure(1);
 					}
 				};
-				elements[0][3] = new MenuButton(GameWindow.getSetWidth()/2-32, 250, new GameSprite("ui/menu/main/exit-selected.png"), new GameSprite("ui/menu/main/exit-deselected.png")) {
+				elements[0][3] = new MenuButton(GameWindow.getSetWidth()/2-32, 250, new GameSprite("ui/menu/main/exit-selected.png", false), new GameSprite("ui/menu/main/exit-deselected.png", false)) {
 					public void onClick() {
 						System.exit(0);
 					}
@@ -347,8 +349,8 @@ public class PuyoGameMain {
 	}
 	
 	//---Getters---//
-	public static GameEngine getGameEngine() { return engine; }
 	public static MenuManager getMenus() { return menus; }
+	public static ExecutorService getThreadPool() { return pool; }
 	
 	public static enum RenderQuality {
 		LOW,HIGH;

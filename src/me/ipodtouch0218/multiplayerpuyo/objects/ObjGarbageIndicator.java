@@ -115,8 +115,8 @@ public class ObjGarbageIndicator extends GameObject {
 		}
 		
 		public void load() {
-			sprite = new GameSprite("ui/board/garbage/" + filename);
-			ImageFilter filter = new GrayFilter(true, 50);  
+			sprite = new GameSprite("ui/board/garbage/" + filename, false);
+			ImageFilter filter = new GrayFilter(true, 50);
 			ImageProducer producer = new FilteredImageSource(sprite.getImage().getSource(), filter);  
 			graySprite = Toolkit.getDefaultToolkit().createImage(producer);  
 		}

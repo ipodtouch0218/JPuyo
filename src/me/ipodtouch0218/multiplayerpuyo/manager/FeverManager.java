@@ -3,14 +3,14 @@ package me.ipodtouch0218.multiplayerpuyo.manager;
 import java.awt.Color;
 import java.util.ArrayList;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
-import me.ipodtouch0218.multiplayerpuyo.PuyoType;
 import me.ipodtouch0218.multiplayerpuyo.misc.FeverBoardSet;
 import me.ipodtouch0218.multiplayerpuyo.misc.PuyoInfo;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoFeverBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjTextDisplay;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoFeverBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticleFallingPuyo;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticleFeverIcon;
 import me.ipodtouch0218.multiplayerpuyo.sound.CharacterSounds;
@@ -70,48 +70,47 @@ public class FeverManager extends GameObject {
 			board.getDropper().disable();
 		}
 		otherBoardLayout = board.getBoard().clone();
-		for (int x = 0; x < 6; x++) {
+		for (int x = 0; x < board.getWidth(); x++) {
 			otherBoardLayout[x] = board.getBoard()[x].clone();
 		}
 		board.clearBoard(false);
 		inFever = true;
 		
-		PuyoGameMain.getGameEngine().addGameObject(new ParticleFeverIcon(board));
+		GameEngine.addGameObject(new ParticleFeverIcon(board));
 		
 		board.getGarbageIndicator().setGrayscale(true);
 		board.getGarbageIndicator().setY(board.getGarbageIndicator().getY()-12);
 		
-		CharacterSounds.FEVER_START.getSound(board.getCharacter()).play();
+		CharacterSounds.FEVER_START.getSound(board.getCharacter(), board.isCharacterAlt()).play();
 		GameSounds.FEVER_START.play();
 		
-		new Thread() {
-			public void run() {
-				ArrayList<ParticleFallingPuyo> falling = dropBoard(board, getRandomBoard(chainLength));
-				while (!falling.isEmpty()) {
-					try {
-						Thread.sleep(1);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
+		PuyoGameMain.getThreadPool().execute(() -> {
+			ArrayList<ParticleFallingPuyo> falling = dropBoard(board, getRandomBoard(chainLength));
+			while (!falling.isEmpty()) {
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
-				board.getDropper().enable();
 			}
-		}.start();
-	}
-	
-	public void puyoLand() {
-		new Thread(new LandingFeverManager(this, board, board.getFeverIndicator())).start();
+			board.setReadyForPuyo(true);
+		});
 	}
 	
 	public void reset() {
-		inFever = false;
 		chainLength = 5;
 		timeRemaining = 15;
 		feverCharge = 0;
 		
 		if (board.getFeverIndicator() != null) board.getFeverIndicator().setOverallGarbage(0);
-		if (board.getGarbageIndicator() != null) board.getGarbageIndicator().setGrayscale(false);
+		if (board.getGarbageIndicator() != null) {
+			board.getGarbageIndicator().setGrayscale(false);
+			if (inFever) {
+				board.getGarbageIndicator().setY(board.getGarbageIndicator().getY()+12);
+			}
+		}
+		inFever = false;
 	}
 	
 	public void endFever() {
@@ -129,7 +128,6 @@ public class FeverManager extends GameObject {
 		board.getGarbageIndicator().setOverallGarbage(board.getGarbageIndicator().getOverallGarbage() + board.getFeverIndicator().getOverallGarbage());
 		board.getFeverIndicator().setOverallGarbage(0);
 		board.getGarbageIndicator().setGrayscale(false);
-		board.getGarbageIndicator().setY(board.getGarbageIndicator().getY()+12);
 		board.setReadyForPuyo(true);
 		GameSounds.FEVER_FLIP.play();
 		
@@ -141,9 +139,9 @@ public class FeverManager extends GameObject {
 		if (timeRemaining <= -1) { return; }
 		int max = (board.getBoardManager().getPlayers() == 1 ? 60 : 30);
 		timeRemaining = Math.min(max, timeRemaining+time); 
-		PuyoGameMain.getGameEngine().addGameObject(new ObjTextDisplay("+" + (double) time, 0, -0.5, 2*60, 14, Color.WHITE), (int) board.getX()+(board.getWidth()*16)+5, (int) board.getY()+(board.getHeight()*16)-60-20);
+		GameEngine.addGameObject(new ObjTextDisplay("+" + (double) time, 0, -0.5, 2*60, 14, Color.WHITE), (int) board.getX()+(board.getWidth()*16)+5, (int) board.getY()+(board.getHeight()*16)-60-20);
 	}
-	public void addCharge() {  feverCharge = Math.min(7, feverCharge + 1); }
+	public void addCharge() { feverCharge = Math.min(7, feverCharge + 1); }
 	public void addChainLength(int amount) { chainLength = Math.max(3, Math.min(14, chainLength+amount)); }
 	public void setCharge(int i) { feverCharge = i; }
 	public void setInFever(boolean b) { inFever = b; }
@@ -163,11 +161,10 @@ public class FeverManager extends GameObject {
 		ArrayList<ParticleFallingPuyo> puyos = new ArrayList<>();
 		for (int x = 0; x < puyoInfos.length; x++) {
 			for (int y = puyoInfos[0].length-1; y >= 0; y--) {
-				PuyoType type = puyoInfos[x][y].type;
-				if (type == null) { continue; }
+				PuyoInfo type = puyoInfos[x][y];
+				if (type.type == null) { continue; }
 				
-				LandingPuyoManager.turnIntoFallingPuyo(board, type, x, y+2, (y-11d)*1.25d, puyos, 0.5, null, false, -1);
-				
+				LandingPuyoManager.turnIntoFallingPuyo(board, type, x, y+2, (y-11d)*1.25d, puyos, 2);
 			}
 		}
 		return puyos;

@@ -35,7 +35,7 @@ public enum PuyoType {
 			if (spr.getEndX() != -1) {
 				sprite = sheet.getSpriteRange(spr.getStartX(), spr.getStartY(), spr.getEndX(), spr.getEndY());
 			} else {
-				sprite = sheet.getSprite(spr.getStartX(), spr.getStartY());
+				sprite = sheet.getSprite(spr.getStartX(), spr.getStartY(), false);
 			}
 			sprites.put(spr, sprite);
 			listener.loaded(sprite.getFileName());

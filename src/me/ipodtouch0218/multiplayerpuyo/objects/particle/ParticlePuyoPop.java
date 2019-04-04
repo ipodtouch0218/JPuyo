@@ -1,8 +1,10 @@
 package me.ipodtouch0218.multiplayerpuyo.objects.particle;
 
+import java.awt.Graphics2D;
+
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.java2dengine.util.Vector2D;
-import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
 import me.ipodtouch0218.multiplayerpuyo.manager.PuyoBoardManager;
 
@@ -13,6 +15,7 @@ public class ParticlePuyoPop extends GameObject {
 	
 	public ParticlePuyoPop(double xVel, PuyoType color) {
 		vel.setX(xVel);
+		System.out.println(color);
 		if (color == null) {
 			return;
 		}
@@ -32,8 +35,12 @@ public class ParticlePuyoPop extends GameObject {
 		
 		
 		if (lifetime > 2) {
-			PuyoGameMain.getGameEngine().removeGameObject(this);
+			GameEngine.removeGameObject(this);
 		}
 	}
 	
+	@Override
+	public void render(Graphics2D g) {
+		super.render(g);
+	}
 }

@@ -2,13 +2,15 @@ package me.ipodtouch0218.multiplayerpuyo.manager;
 
 import java.util.ArrayList;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.sound.Sound;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
+import me.ipodtouch0218.multiplayerpuyo.misc.GarbageSenderStatus;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjGarbageIndicator;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard.FeverBackground;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoFeverBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjTextDisplay;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard.FeverBackground;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoFeverBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticleFallingPuyo;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.senders.ParticleGarbageCancelSender;
 import me.ipodtouch0218.multiplayerpuyo.sound.CharacterSounds;
@@ -24,12 +26,10 @@ public class LandingFeverManager extends LandingPuyoManager {
 	
 	
 	private ObjGarbageIndicator indicator;
-	private FeverManager manager;
 	
-	public LandingFeverManager(FeverManager manager, ObjPuyoFeverBoard board, ObjGarbageIndicator garbage) {
+	public LandingFeverManager(ObjPuyoFeverBoard board, ObjGarbageIndicator garbage) {
 		super(board);
 		indicator = garbage;
-		this.manager = manager;
 	}
 
 	
@@ -37,11 +37,12 @@ public class LandingFeverManager extends LandingPuyoManager {
 	
 	public void run() {
 		ObjPuyoFeverBoard fBoard = (ObjPuyoFeverBoard) board;
+		FeverManager manager = fBoard.getFeverManager();
+		GarbageSenderStatus stat = new GarbageSenderStatus(board);
 		squishDropperPositions();
 		
 		oldScore.put(board, board.getScore());
 		animateDrop(2);
-		board.setDropper(null);
 		
 		while (PuyoBoardManager.isPaused()) { sleep(1); }
 		boolean matched = false;
@@ -53,7 +54,7 @@ public class LandingFeverManager extends LandingPuyoManager {
 			chain++;
 			
 			sleep(75);
-			
+			board.getBoardManager().checkPanic(board, board.getPanic());
 			
 			PuyoType type = PuyoType.values()[(int) (Math.random()*PuyoType.values().length)];
 			double startX = board.getX()+((board.getWidth()*16)/2);
@@ -78,17 +79,17 @@ public class LandingFeverManager extends LandingPuyoManager {
 				startY = (finalAveY / matches.size())*16 + board.getY();
 			}
 			
-			PuyoGameMain.getGameEngine().addGameObject(new ObjTextDisplay(consecutive + " chain!", 0, -0.2, 60, 12, textCol), startX, startY);
+			GameEngine.addGameObject(new ObjTextDisplay(consecutive + " chain!", 0, -0.2, 60, 12, textCol), startX, startY);
 			
 			int garbage = calculateGarbage(scoreToSend) - usedGarbage;
 			if (fBoard.getFeverIndicator().getOverallGarbage() > 0) {
 				ObjGarbageIndicator indi = fBoard.getFeverIndicator();
-				PuyoGameMain.getGameEngine().addGameObject(new ParticleGarbageCancelSender(board, indi, garbage, consecutive, type), startX, startY);
+				GameEngine.addGameObject(new ParticleGarbageCancelSender(stat, indi, garbage, consecutive, type, false), startX, startY);
 			} else if (board.getGarbageIndicator().getOverallGarbage() > 0) {
 				ObjGarbageIndicator indi = board.getGarbageIndicator();
-				PuyoGameMain.getGameEngine().addGameObject(new ParticleGarbageCancelSender(board, indi, garbage, consecutive, type), startX, startY);
+				GameEngine.addGameObject(new ParticleGarbageCancelSender(stat, indi, garbage, consecutive, type, false), startX, startY);
 			} else {
-				board.getBoardManager().sendGarbage(board, garbage, true, type, consecutive);
+				board.getBoardManager().sendGarbage(stat, garbage, true, type, false, consecutive);
 			}
 			
 			if (Math.random() < 0.7) {
@@ -118,30 +119,27 @@ public class LandingFeverManager extends LandingPuyoManager {
 				}
 				CharacterSounds finalNextSound = nextSound;
 				longdelay = !(finalNextSound == CharacterSounds.SPELL_2 || finalNextSound == CharacterSounds.SPELL_3);
-				new Thread() {
-					public void run() {
-						Sound sound = finalNextSound.getSound(board.getCharacter());
-						int times = (finalNextSound == CharacterSounds.SPELL_2 || finalNextSound == CharacterSounds.SPELL_3 ? 1 : 4);
-						for (;times>0;times--) {
-							if (sound.isPlaying()) {
-								sound.getClip().setFramePosition(0);
-							} else {
-								sound.play();
-							}
-							try {
-								sleep(125);
-							} catch (InterruptedException e) {}
+				PuyoGameMain.getThreadPool().execute(() -> {
+					Sound sound = finalNextSound.getSound(board.getCharacter(), board.isCharacterAlt());
+					int times = (finalNextSound == CharacterSounds.SPELL_2 || finalNextSound == CharacterSounds.SPELL_3 ? 1 : 4);
+					for (;times>0;times--) {
+						if (sound.isPlaying()) {
+							sound.getClip().setFramePosition(0);
+						} else {
+							sound.play();
 						}
+						sleep(125);
 					}
-				}.start();
+				});
 			} else {
-				nextSound.getSound(board.getCharacter()).play();
+				nextSound.getSound(board.getCharacter(), board.isCharacterAlt()).play();
 			}
 			
 			while (PuyoBoardManager.isPaused()) { sleep(1); }
 			animateDrop(2);
 		}	
-		
+		stat.boardChainOver = true;
+		stat.checkForFinished();
 		sleep(75);
 		
 		boolean allclear = true;
@@ -167,16 +165,12 @@ public class LandingFeverManager extends LandingPuyoManager {
 			
 			boolean longdelayfinal = longdelay;
 			if (consecutive+1 >= manager.getChainLength()) {
-				new Thread() {
-					public void run() {
-						try {
-							sleep((longdelayfinal ? 1000 : 500));
-						} catch (InterruptedException e) {}
-						CharacterSounds.FEVER_SUCCESS.getSound(board.getCharacter()).play();
-					}
-				}.start();
+				PuyoGameMain.getThreadPool().execute(() -> {
+					sleep((longdelayfinal ? 1000 : 500));
+					CharacterSounds.FEVER_SUCCESS.getSound(board.getCharacter(), board.isCharacterAlt()).play();
+				});
 			} else {
-				CharacterSounds.FEVER_FAIL.getSound(board.getCharacter()).play();
+				CharacterSounds.FEVER_FAIL.getSound(board.getCharacter(), board.isCharacterAlt()).play();
 			}
 			
 			manager.addChainLength(Math.max(-2,(chain+1-manager.getChainLength())));
@@ -217,9 +211,8 @@ public class LandingFeverManager extends LandingPuyoManager {
 			}
 		}
 		
-		sleep(200);
+		sleep(150);
 		
-		board.getBoardManager().verifyGarbage(board);
 		board.setReadyForPuyo(true);
 	}
 }

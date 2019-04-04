@@ -1,10 +1,10 @@
 package me.ipodtouch0218.multiplayerpuyo.objects.particle;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.display.sprite.GameSprite;
 import me.ipodtouch0218.java2dengine.display.sprite.SpriteSheet;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.java2dengine.util.Vector2D;
-import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.manager.PuyoBoardManager;
 
 public class ParticleIceChip extends GameObject {
@@ -38,7 +38,7 @@ public class ParticleIceChip extends GameObject {
 		
 		
 		if (lifetime > 2) {
-			PuyoGameMain.getGameEngine().removeGameObject(this);
+			GameEngine.removeGameObject(this);
 		}
 	}
 	

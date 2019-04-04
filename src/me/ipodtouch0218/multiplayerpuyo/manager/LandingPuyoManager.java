@@ -11,15 +11,19 @@ import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain.RenderQuality;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
 import me.ipodtouch0218.multiplayerpuyo.misc.Gamemodes;
+import me.ipodtouch0218.multiplayerpuyo.misc.GarbageSenderStatus;
+import me.ipodtouch0218.multiplayerpuyo.misc.PartyItem;
 import me.ipodtouch0218.multiplayerpuyo.misc.PuyoCharacter.CharacterPose;
 import me.ipodtouch0218.multiplayerpuyo.misc.PuyoInfo;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjDropper;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjGarbageIndicator;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoFeverBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.ObjTextDisplay;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPartyBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoFeverBoard;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticleFallingPuyo;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticleIceChip;
+import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticleIceWave;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.ParticlePuyoPop;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.senders.ParticleFeverSender;
 import me.ipodtouch0218.multiplayerpuyo.objects.particle.senders.ParticleGarbageCancelSender;
@@ -39,32 +43,45 @@ public class LandingPuyoManager implements Runnable {
 	protected int scoreToSend = 0;
 	protected int consecutive = 0;
 	
+	private int currentGarbage;
 	private int usedGarbage = 0;
+	
+	private boolean dropPartyItem;
 	
 	public LandingPuyoManager(ObjPuyoBoard board) {
 		this.board = board;
 	}
 	
-	public void run() {
-		
+	public void run() {	
+		GarbageSenderStatus stat = new GarbageSenderStatus(board);
 		ParticleFeverSender sender = null;
 		
+		board.getBoardManager().checkPanic(board, board.getPanic());
 		squishDropperPositions();
 		
 		oldScore.put(board, board.getScore());
 		animateDrop(0.2);
 		
-		board.setDropper(null);
+		handleIce();
+		currentGarbage = board.getGarbageIndicator().getOverallGarbage();
+		boolean itemd = false;
 		
-		
-		if (board.getBoardManager().getGamemode() == Gamemodes.ICE_PUYO) {
-			handleIce();
+		if (board instanceof ObjPartyBoard) {
+			ObjPartyBoard pb = (ObjPartyBoard) board;
+			if (pb.willFreeze()) {
+				ParticleIceWave wave = GameEngine.addGameObject(new ParticleIceWave(board));
+				pb.setFreeze(false);
+				
+				while (!wave.isFinished()) {
+					sleep(50);
+				}
+			}
 		}
-		
 		
 		while (PuyoBoardManager.isPaused()) { sleep(1); }
 		while (board.checkForMatches(this)) {
 			sleep(200);
+			board.getBoardManager().checkPanic(board, board.getPanic());
 			if (board.hasAllClear()) {
 				board.setAllClear(false);
 				scoreToSend += 30*70;
@@ -93,22 +110,43 @@ public class LandingPuyoManager implements Runnable {
 				startY = ((finalAveY / matches.size())-2)*16 + board.getY();
 			}
 			
-			PuyoGameMain.getGameEngine().addGameObject(new ObjTextDisplay(consecutive + " chain!", 0, -0.2, 60, 12, textCol), startX, startY);
+			GameEngine.addGameObject(new ObjTextDisplay(consecutive + " chain!", 0, -0.2, 60, 12, textCol), startX, startY);
 			
-			boolean counter = board.getGarbageIndicator().getOverallGarbage() > 0;
+			boolean counter = false;
 			
+			boolean red = false;
 			int calculatedGarbage = calculateGarbage(scoreToSend);
+			if (board instanceof ObjPartyBoard) {
+				double atkpower = ((ObjPartyBoard) board).getAttackPower();
+				calculatedGarbage *= atkpower;
+				red = atkpower > 1;
+			}
+			
 			int garbage = calculatedGarbage - usedGarbage;
+			
+			counter = currentGarbage > 0;
+			currentGarbage -= garbage;
+			counter = (counter && currentGarbage <= 0);
+			
 			if (board.getGarbageIndicator().getOverallGarbage() > 0) {
-
+				
 				ObjGarbageIndicator indi = board.getGarbageIndicator();
-				PuyoGameMain.getGameEngine().addGameObject(new ParticleGarbageCancelSender(board, indi, garbage, consecutive, type), startX, startY);
+				GameEngine.addGameObject(new ParticleGarbageCancelSender(stat, indi, garbage, consecutive, type, red), startX, startY);
 
-				if (board.getBoardManager().getGamemode().isFever()) {
+				if (board.getBoardManager().getGamemode().getGamemodeSettings().fever) {
 					ObjPuyoFeverBoard fboard = (ObjPuyoFeverBoard) board;
-					double targetX = board.getX()+board.getWidth()*16+8+(METER_OFFSETS[Math.min(6, fboard.getFeverManager().getCharge())][0]*2);
-					double targetY = board.getY()+board.getHeight()*16-100+(METER_OFFSETS[Math.min(6, fboard.getFeverManager().getCharge())][1]*2);
-					sender = PuyoGameMain.getGameEngine().addGameObject(new ParticleFeverSender(fboard.getFeverManager(), (int) targetX, (int) targetY), board.getX()+8, board.getY()-16);
+					double[] offsets = METER_OFFSETS[Math.min(6, fboard.getFeverManager().getCharge())];
+					double targetX = 0, targetY = 0;
+					
+					if (fboard.isFlipped()) {
+						targetX = (board.getX()-14) - (16-(offsets[0]*2));
+						targetY = (board.getY()+((board.getHeight()-2)*16)-100) + (offsets[1]*2);
+					} else {
+						targetX = (board.getX()+(board.getWidth()*16)+8) + (offsets[0]*2);
+						targetY = (board.getY()+((board.getHeight()-2)*16)-100) + (offsets[1]*2);
+					}
+					
+					sender = GameEngine.addGameObject(new ParticleFeverSender(fboard.getFeverManager(), (int) targetX, (int) targetY), board.getX()+8, board.getY()-16);
 
 					for (ObjPuyoBoard boards : board.getBoardManager().getBoards()) {
 						if (boards == board) { continue; }
@@ -116,26 +154,34 @@ public class LandingPuyoManager implements Runnable {
 					}
 				}
 			} else {
-				if (board.getBoardManager().getGamemode().isFever()) {
+				if (board.getBoardManager().getGamemode().getGamemodeSettings().fever) {
 					((ObjPuyoFeverBoard) board).getFeverManager().addTime(1);
 				}
-				board.getBoardManager().sendGarbage(board, garbage, true, type, consecutive);
+				board.getBoardManager().sendGarbage(stat, garbage, true, type, red, consecutive);
 			}
 			usedGarbage = calculatedGarbage;
 			
 			//character sound handling
-			CharacterSounds nextSound = soundOrder[Math.min(consecutive-1,soundOrder.length-1)];
-			if (counter && board.getGarbageIndicator().getOverallGarbage() <= 0) {
-				nextSound = CharacterSounds.COUNTER;
+			if (dropPartyItem && !itemd) {
+				itemd = true;
+			} else {
+				CharacterSounds nextSound = soundOrder[Math.min(consecutive-1,soundOrder.length-1)];
+				if (counter && consecutive > 2) {
+					nextSound = CharacterSounds.COUNTER;
+					board.poseCharacter(CharacterPose.COUNTER);
+				} else {
+					if (consecutive >= 3) {
+						board.poseCharacter(CharacterPose.valueOf("CHAIN_" + Math.min((consecutive-2), 5)));
+					}
+				}
+				board.getCharacter().getSound(nextSound, board.isCharacterAlt()).play();
 			}
-			nextSound.getSound(board.getCharacter()).play();
 			
 			while (PuyoBoardManager.isPaused()) { sleep(1); } 
 			animateDrop(0.2);
 		}
-		if (consecutive > 3) {
-			board.poseCharacter(CharacterPose.CHAIN);
-		}
+		stat.boardChainOver = true;
+		stat.checkForFinished();
 		while (PuyoBoardManager.isPaused()) { sleep(1); }
 		
 		
@@ -144,28 +190,12 @@ public class LandingPuyoManager implements Runnable {
 				sleep(1);
 			}
 		}
-		board.getBoardManager().verifyGarbage(board);
-		
-		//if (!board.getBoardManager().dontDrop()) {
-			if (!board.getBoardManager().isOffsetEnabled() ||  board.getGarbageIndicator().getOverallGarbage() == 0) { 
-				dropGarbage(board.getGarbageIndicator()); 
-			} else {
-				if (scoreToSend <= 10) {
-					dropGarbage(board.getGarbageIndicator());
-				}
-			}
-		//}
-		
-		
-		while (PuyoBoardManager.isPaused()) { sleep(1); }
-		animateDrop(0.2);
-		while (PuyoBoardManager.isPaused()) { sleep(1); }
-		
+
 		boolean allclear = true;
 		xLoop:
 		for (int x = 0; x < board.getWidth(); x++) {
 			for (int y = 0; y < board.getHeight(); y++) {
-				if (board.getPuyoAt(x, y) != null) { allclear = false; break xLoop; }
+				if (board.getPuyoAt(x, y).type != null) { allclear = false; break xLoop; }
 			}
 		}
 		if (allclear) {
@@ -179,11 +209,31 @@ public class LandingPuyoManager implements Runnable {
 			}
 			GameSounds.ALL_CLEAR.play();
 		}
+		if (!board.getBoardManager().isOffsetEnabled()) { 
+			dropGarbage(board.getGarbageIndicator()); 
+		} else {
+			if (scoreToSend <= 10) {
+				dropGarbage(board.getGarbageIndicator());
+			}
+		}
 		
-		
+		if (dropPartyItem) {
+			int x = (int) (Math.random()*board.getWidth());
+			while (board.getPuyoAt(x, 2).type != null) {
+				x = (int) (Math.random()*board.getWidth());
+			}
+			
+			PartyItem item = PartyItem.getRandomItem(((ObjPartyBoard) board).getScorePosition() == 1, board.getCharacter().getPartyItemSet());
+			
+			board.getPuyoAt(x, 0).partyItem = item;
+			board.getPuyoAt(x, 0).type = PuyoType.GARBAGE;
+		}
+			
+		while (PuyoBoardManager.isPaused()) { sleep(1); }
+		animateDrop(0.2);
 		while (PuyoBoardManager.isPaused()) { sleep(1); }
 		
-		sleep(200);
+		sleep(150);
 		board.setReadyForPuyo(true);
 	}
 	
@@ -200,7 +250,7 @@ public class LandingPuyoManager implements Runnable {
 						
 						if (PuyoGameMain.quality == RenderQuality.HIGH) {
 							for (int i = 0; i < 2; i++) {
-								PuyoGameMain.getGameEngine().addGameObject(new ParticleIceChip(Math.random()*3d-1.5), board.getX()+x*16, board.getY()+(y-2)*16);
+								GameEngine.addGameObject(new ParticleIceChip(Math.random()*3d-1.5), board.getX()+x*16, board.getY()+(y-2)*16);
 							}
 						}
 					}
@@ -226,12 +276,8 @@ public class LandingPuyoManager implements Runnable {
 		ObjDropper dropper = board.getDropper();
 		if (dropper == null) { return; }
 		int[][] dropLocs = dropper.dropLocations();
-		ArrayList<Integer> squished = new ArrayList<Integer>();
 		for (int[] loc : dropLocs) {
-			int x = loc[0];
-			if (squished.contains(x)) continue;
-			squished.add(x);
-			board.squishRow(x, 0.15, 0.1);
+			board.squishcolumn(loc[0], 0.03, 5);
 		}
 	}
 	
@@ -249,52 +295,43 @@ public class LandingPuyoManager implements Runnable {
 	protected void animateDrop(double yVel) {
 		
 		for (int x = board.getWidth()-1; x >= 0; x--) {
-			HashMap<Integer, PuyoType> blank = new HashMap<>();
 			ArrayList<Integer> occupiedSpaces = new ArrayList<>();
-			yLoop:
+			yloop:
 			for (int y = board.getHeight()-1; y >= 0; y--) {
 				PuyoInfo type = board.getPuyoAt(x, y);
+				boolean fall = true;
 				
-				if (type.type == null) { continue yLoop; } 
-				if (!board.isInBounds(x,y+1) || board.getPuyoAt(x,y+1).type != null) { continue yLoop; }
+				if (type.type == null) { continue yloop; } //no puyo, skip
+				if (!board.isInBounds(x, y+1)) { fall = false; } //supported by out-of-bounds, skip
+				if ((board.getPuyoAt(x, y+1) != null && board.getPuyoAt(x,y+1).type != null)) { fall = false; } //supported from below, skip
 				
-				blank.put(y, type.type);
-				int pos = getTopPuyoLocAtIncludingOccupied(x, occupiedSpaces);
-				
-				occupiedSpaces.add(pos);
-				int fx = x;
-				int fy = y;
-				turnIntoFallingPuyo(board, type.type, x, pos, y, falling, yVel, new Runnable() {
-					public void run() {
-						board.setPuyoAt(fx, fy, null);
-					}
-				}, type.ice, type.icetimer);
-				type.type = null;
-				type.ice = false;
-				type.icetimer = -1;
-			}
-			for (Entry<Integer, PuyoType> en : blank.entrySet()) {
-				board.setPuyoAt(x, en.getKey(), en.getValue());
+				if (fall) {
+					int pos = getTopPuyoLocAtIncludingOccupied(x, occupiedSpaces);
+					
+					occupiedSpaces.add(pos);
+					int fx = x;
+					int fy = y;
+					
+					turnIntoFallingPuyo(board, type, x, pos, y, falling, yVel);
+					board.setPuyoAt(fx, fy, new PuyoInfo());
+				}
 			}
 		}
 		while (!falling.isEmpty()) { sleep(1); }
 	}
 	
-	public static void turnIntoFallingPuyo(ObjPuyoBoard board, PuyoType type, int targetX, int targetY, double startY, ArrayList<ParticleFallingPuyo> otherPuyos, double yVel, Runnable torun, boolean ice, int icehealth) {
-		ParticleFallingPuyo newPuyo = new ParticleFallingPuyo(board, type, targetX, targetY, otherPuyos, yVel, torun, ice, icehealth);
-		GameEngine.getInstance().addGameObject(newPuyo, (targetX*16)+board.getX(), (startY*16)+board.getY());
+	public static void turnIntoFallingPuyo(ObjPuyoBoard board, PuyoInfo type, int targetX, int targetY, double startY, ArrayList<ParticleFallingPuyo> otherPuyos, double yVel) {
+		ParticleFallingPuyo newPuyo = new ParticleFallingPuyo(board, type, targetX, targetY, otherPuyos, yVel);
+		GameEngine.addGameObject(newPuyo, (targetX*16)+board.getX(), (startY*16)+board.getY());
 	}
 	
 	protected void dropGarbage(ObjGarbageIndicator in) {
 		ArrayList<ParticleFallingPuyo> garbage = new ArrayList<>();
-		if (board.getDroppableGarbage() > in.getOverallGarbage()) {
-			board.setDroppableGarbage(in.getOverallGarbage());
-		}
 		if (in.getOverallGarbage() == 0) { return; }
 		int remainingToDrop = Math.min(30, board.getDroppableGarbage());
 		int garbageDropped = remainingToDrop;
 		in.setOverallGarbage(in.getOverallGarbage()-remainingToDrop);
-		board.addDroppableGarbage(-garbageDropped);
+		board.addDroppableGarbage(null, -garbageDropped);
 		if (remainingToDrop == 0) { return; }
 		
 		int heightCounter = 0;
@@ -306,14 +343,15 @@ public class LandingPuyoManager implements Runnable {
 					if (board.getPuyoAt(x, 0).type != null || occupiedSpaces.get(x).contains(0)) { continue; }
 					int pos = getTopPuyoLocAtIncludingOccupied(x, occupiedSpaces.get(x));
 					
-					boolean ice = false;
-					PuyoType type = PuyoType.GARBAGE;
+					PuyoInfo type = new PuyoInfo();
+					type.type = PuyoType.GARBAGE;
 					if (board.getBoardManager().getGamemode() == Gamemodes.ICE_PUYO) {
-						type = board.getCharacter().getIcePuyos()[x][heightCounter];
-						ice = true;
+						type.type = board.getCharacter().getIcePuyos()[x][heightCounter];
+						type.ice = true;
+						type.icetimer = 2;
 					}
 					
-					turnIntoFallingPuyo(board, type, x, pos, -heightCounter, garbage, 0.2, null, ice, 2);
+					turnIntoFallingPuyo(board, type, x, pos, -heightCounter, garbage, 0.2);
 					
 					occupiedSpaces.get(x).add(pos);
 				}
@@ -332,14 +370,15 @@ public class LandingPuyoManager implements Runnable {
 					if (board.getPuyoAt(x, 0).type != null || occupiedSpaces.get(x).contains(0)) { continue; }
 					int pos = getTopPuyoLocAtIncludingOccupied(x, occupiedSpaces.get(x));
 					
-					boolean ice = false;
-					PuyoType type = PuyoType.GARBAGE;
+					PuyoInfo type = new PuyoInfo();
+					type.type = PuyoType.GARBAGE;
 					if (board.getBoardManager().getGamemode() == Gamemodes.ICE_PUYO) {
-						type = board.getCharacter().getIcePuyos()[x][heightCounter];
-						ice = true;
+						type.type = board.getCharacter().getIcePuyos()[x][heightCounter];
+						type.ice = true;
+						type.icetimer = 2;
 					}
 					
-					turnIntoFallingPuyo(board, type, x, pos, -heightCounter, garbage, 0.2, null, ice, 2);
+					turnIntoFallingPuyo(board, type, x, pos, -heightCounter, garbage, 0.2);
 					
 					occupiedSpaces.get(x).add(pos);
 				}
@@ -347,9 +386,10 @@ public class LandingPuyoManager implements Runnable {
 			}
 		}
 		if (garbageDropped > 6*3) {
-			CharacterSounds.GARBAGE_BIG.getSound(board.getCharacter()).play();
+			CharacterSounds.GARBAGE_BIG.getSound(board.getCharacter(), board.isCharacterAlt()).play();
+			board.poseCharacter(CharacterPose.GARBAGE);
 		} else if (garbageDropped > 6*1) {
-			CharacterSounds.GARBAGE_SMALL.getSound(board.getCharacter()).play();
+			CharacterSounds.GARBAGE_SMALL.getSound(board.getCharacter(), board.isCharacterAlt()).play();
 		}
 		if (board.getControls() instanceof JoyconControls) {
 			((JoyconControls) board.getControls()).getJoycon().vibrate(false,(byte)2,true,(byte)garbageDropped);
@@ -391,19 +431,35 @@ public class LandingPuyoManager implements Runnable {
 				}
 			}
 			PuyoInfo type = board.getPuyoAt(coords[0], coords[1]);
+			PuyoType color = type.type;
 			if (type.type != PuyoType.GARBAGE && !type.ice) {
 				comboSize++;
 				colors.put(type.type, colors.getOrDefault(type, 0)+1);
 			}
+			
 			if (type.ice) {
 				board.setIcy(coords[0], coords[1], false);
 			} else {
-				board.setPuyoAt(coords[0], coords[1], null);
+				if (type.type == PuyoType.GARBAGE && type.partyItem != null) {
+					GameSounds.PARTY_BOX_OPEN.play();
+					type.partyItem.onCollect(board);
+					dropPartyItem = true;
+					
+					if (type.partyItem.isSelfItem()) {
+						CharacterSounds.PARTY_SELF.getSound(board.getCharacter(), board.isCharacterAlt()).play();
+					} else {
+						CharacterSounds.PARTY_OTHER.getSound(board.getCharacter(), board.isCharacterAlt()).play();
+					}
+					GameEngine.scheduleSyncTask(()->{
+						type.partyItem.getSound().play();
+					}, 0.5);
+				}
+				board.setPuyoTypeAt(coords[0], coords[1], null);
 			}
 			
 			if (PuyoGameMain.quality == RenderQuality.HIGH) {
 				for (int i = 0; i < 2; i++) {
-					PuyoGameMain.getGameEngine().addGameObject(new ParticlePuyoPop((Math.random()*3d)-1.5, type.type), board.getX()+(coords[0]*16), board.getY()+((coords[1]-2)*16));
+					GameEngine.addGameObject(new ParticlePuyoPop((Math.random()*3d)-1.5, color), board.getX()+(coords[0]*16), board.getY()+((coords[1]-2)*16));
 				}
 			}
 			popped.add(coords);

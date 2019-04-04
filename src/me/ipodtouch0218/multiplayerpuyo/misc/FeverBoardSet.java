@@ -7,7 +7,7 @@ import java.util.ArrayList;
 
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
 import me.ipodtouch0218.multiplayerpuyo.manager.FeverManager;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
 
 public class FeverBoardSet {
 

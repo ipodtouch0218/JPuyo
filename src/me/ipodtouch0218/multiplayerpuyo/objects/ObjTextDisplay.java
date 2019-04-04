@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 
@@ -39,7 +40,7 @@ public class ObjTextDisplay extends GameObject {
 		x+=(xv*60d)*delta;
 		y+=(yv*60d)*delta;
 		if (lifetime <= 0 && lifetime+prevDelta+0.01 > 0) {
-			PuyoGameMain.getGameEngine().removeGameObject(this);
+			GameEngine.removeGameObject(this);
 		}
 		lifetime-=delta;
 		prevDelta = delta;
@@ -53,19 +54,23 @@ public class ObjTextDisplay extends GameObject {
 		g.setColor(color);
 		g.setFont(PuyoGameMain.puyofont.deriveFont(size));
 		
-		FontMetrics metrics = g.getFontMetrics();
-		if (metrics == null) { return; }
-		int nx = 0, ny = 0;
-		try {
-		    nx = (int) (x - (metrics.stringWidth(display)) / 2);
-		    ny = (int) (y + (metrics.getHeight() / 2) + metrics.getAscent());
-		} catch (NullPointerException e) {}
-	    
-		if (display == null) { return; }
-		g.drawString(display, nx, ny);
-		
+		drawStringCentered(g, display, x, y);
 	}
 	
 	public void setColor(Color color) { this.color = color; }
 	public void setDisplay(String display) { this.display = display; }
+	
+	///static
+	
+	public static void drawStringCentered(Graphics2D g, String text, double x, double y) {
+		FontMetrics metrics = g.getFontMetrics();
+		if (metrics == null) { return; }
+		int nx = 0, ny = 0;
+		try {
+		    nx = (int) (x - (metrics.stringWidth(text)) / 2);
+		    ny = (int) (y + (metrics.getHeight() / 2) + metrics.getAscent());
+		} catch (NullPointerException e) {}
+	    
+		g.drawString(text, nx, ny);
+	}
 }

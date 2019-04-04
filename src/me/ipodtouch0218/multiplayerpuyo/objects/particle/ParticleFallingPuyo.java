@@ -9,9 +9,10 @@ import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain.RenderQuality;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
+import me.ipodtouch0218.multiplayerpuyo.PuyoType.PuyoSprites;
 import me.ipodtouch0218.multiplayerpuyo.manager.PuyoBoardManager;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoIceBoard;
+import me.ipodtouch0218.multiplayerpuyo.misc.PuyoInfo;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
 import me.ipodtouch0218.multiplayerpuyo.sound.GameSounds;
 
 public class ParticleFallingPuyo extends GameObject {
@@ -22,25 +23,25 @@ public class ParticleFallingPuyo extends GameObject {
 	
 	private ObjPuyoBoard board;
 	private double yVel = 0.2;
-	private PuyoType type;
+	private PuyoInfo type;
 	private int targetX;
 	private int targetY;
 	private int pixelY;
-	private Runnable torun;
-	private boolean ice;
-	private int icehealth;
 	
 	private boolean landed;
 	
 	
-	public ParticleFallingPuyo(ObjPuyoBoard board, PuyoType type, int targetX, int targetY, ArrayList<ParticleFallingPuyo> list, double yVel, Runnable torun, boolean ice, int icehealth) {
+	public ParticleFallingPuyo(ObjPuyoBoard board, PuyoInfo inf, int targetX, int targetY, ArrayList<ParticleFallingPuyo> list, double yVel) {
 		this.board = board;
-		this.type = type;
+		this.type = inf.clone();
 		this.targetX = targetX;
-		this.torun = torun;
 		this.list = list;
 		this.yVel = yVel;
-		setSprite(type.getSprite(PuyoType.PuyoSprites.BASE));
+		if (type.type == PuyoType.GARBAGE && inf.partyItem != null) {
+			setSprite(inf.partyItem.getSprite());
+		} else {
+			setSprite(type.type.getSprite(PuyoSprites.BASE));
+		}
 		this.targetY = targetY;
 		if (targetY != -1) {
 			this.pixelY = (int) (board.getY()+(targetY*16));
@@ -49,17 +50,11 @@ public class ParticleFallingPuyo extends GameObject {
 		}
 		if (list != null)
 			list.add(this);
-		this.ice = ice;
-		this.icehealth = icehealth;
 	}
 	
 	@Override
 	public void tick(double delta) {
-		while (PuyoBoardManager.isPaused()) { return; }
-		if (torun != null) {
-			torun.run();
-			torun = null;
-		}
+		if (PuyoBoardManager.isPaused()) { return; }
 		
 		yVel += GRAVITY*60d*delta;
 		y += (yVel*60d)*delta;
@@ -77,13 +72,14 @@ public class ParticleFallingPuyo extends GameObject {
 	
 	@Override
 	public void render(Graphics2D g) {
-
+		if (PuyoBoardManager.isPaused()) { return; }
+		
 		g.setClip((int) board.getX()-3, (int) board.getY()+4, board.getWidth()*16, (board.getHeight()-2)*16);
 		g.drawImage(sprite.getImage(), (int) x-4, (int) y-32, null);
-		if (ice) {
-			GameSprite overlay = ObjPuyoIceBoard.iceoverlay;
-			if (icehealth < 2) {
-				overlay = ObjPuyoIceBoard.icebroken;
+		if (type.ice) {
+			GameSprite overlay = ObjPuyoBoard.iceoverlay;
+			if (type.icetimer < type.icehealth) {
+				overlay = ObjPuyoBoard.icebroken;
 			}
 			g.drawImage(overlay.getImage(), (int) x-4, (int) y-32, null);
 		}
@@ -104,9 +100,14 @@ public class ParticleFallingPuyo extends GameObject {
 				break;
 			}
 		}
+		boolean partysound = type.partyItem != null;
 		if (squish) {
-			board.squishRow(targetX, 0.03, 5);
-			GameSounds.DROP.play();
+			if (partysound) {
+				GameSounds.PARTY_BOX_LAND.play();
+			} else {
+				board.squishcolumn(targetX, 0.03, 5);
+				GameSounds.DROP.play();
+			}
 		}
 		landed = true;
 	}
@@ -114,13 +115,9 @@ public class ParticleFallingPuyo extends GameObject {
 	private void onLand() {
 		if (!(targetX == -1 || targetY == -1)) {
 			board.setPuyoAt(targetX, targetY, type);
-			if (ice) {
-				board.setIcy(targetX, targetY, true);
-				board.getPuyoAt(targetX, targetY).icetimer = icehealth;
-			}
 		}
 		if (list != null)
 			list.remove(this);
-		GameEngine.getInstance().removeGameObject(this);
+		GameEngine.removeGameObject(this);
 	}
 }

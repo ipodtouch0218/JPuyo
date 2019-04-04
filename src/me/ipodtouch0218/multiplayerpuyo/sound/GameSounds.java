@@ -11,8 +11,8 @@ public enum GameSounds {
 	CHAIN_5("chain/chain5.wav"), 
 	CHAIN_6("chain/chain6.wav"), 
 	CHAIN_7("chain/chain7.wav"), 
-  
 	HEAVY("chain/heavy.wav"), 
+	
 	DROP("drop.wav"), 
 	MOVE("move.wav"), 
 	ROTATE("rotate.wav"), 
@@ -34,6 +34,17 @@ public enum GameSounds {
 	FEVER_FLIP("feverFlip.wav"),
 	FEVER_METER_FILL("feverMeter.wav"),
 	FEVER_START("feverStart.wav"),
+	
+	PARTY_BOARDKO("party/boardKo.wav"),
+	PARTY_BOX_LAND("party/boxLand.wav"),
+	PARTY_BOX_OPEN("party/boxOpen.wav"),
+	PARTY_ITEM_ATTACK("party/attackUp.wav"),
+	PARTY_ITEM_SHIELD("party/shieldInit.wav"),
+	PARTY_ITEM_SHIELD_HIT("party/shieldHit.wav"),
+	PARTY_ITEM_ICE("party/ice.wav"),
+	PARTY_ITEM_GENERIC("party/genericItem.wav"),
+	PARTY_ITEM_ROTATE_DENY("party/rotateDeny.wav"),
+	PARTY_ITEM_GARBAGE_CLEAR("party/garbageClear.wav"),
 	
 	ICE_CHIP("iceChip.wav"),
 	ICE_BREAK("iceBreak.wav");

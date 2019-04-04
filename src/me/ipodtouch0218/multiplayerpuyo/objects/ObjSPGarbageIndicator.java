@@ -10,7 +10,7 @@ import me.ipodtouch0218.java2dengine.display.sprite.GameSprite;
 
 public class ObjSPGarbageIndicator extends ObjGarbageIndicator {
 
-	private static final GameSprite bgSprite = new GameSprite("ui/board/garbage/bg.png");
+	private static final GameSprite bgSprite = new GameSprite("ui/board/garbage/bg.png", false);
 	
 	public ObjSPGarbageIndicator() {
 		super(false);

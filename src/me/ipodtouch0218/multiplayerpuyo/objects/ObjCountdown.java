@@ -1,51 +1,53 @@
 package me.ipodtouch0218.multiplayerpuyo.objects;
 
 import java.awt.Graphics2D;
-import java.awt.Image;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.display.sprite.GameSprite;
 import me.ipodtouch0218.java2dengine.object.GameObject;
-import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.manager.PuyoBoardManager;
 
 public class ObjCountdown extends GameObject {
 
-	private GameSprite currentSprite;
-	private boolean shrink;
-	private double shrinkRate = .025;
+	private static final GameSprite[] countdownSprites = {new GameSprite("ui/board/countdown-3.png", false), 
+			  new GameSprite("ui/board/countdown-2.png", false),
+			  new GameSprite("ui/board/countdown-1.png", false),
+			  new GameSprite("ui/board/countdown-go.png", false)};
 	
-	private double scaleTimer = .5;
+	private PuyoBoardManager manager;
+	
+	private double timer = 0;
+	private double scaleAmount = 1;
+	
+	public ObjCountdown(PuyoBoardManager manager) {
+		sprite = countdownSprites[0];
+		this.manager = manager;
+	}
+	
 	@Override
 	public void tick(double delta) {
-		
 		if (PuyoBoardManager.isPaused()) { return; }
+		timer += delta;
+		sprite = countdownSprites[Math.min((int) timer, 3)];
 		
-		if (!shrink) {
-			if (currentSprite == null) currentSprite = sprite;
-			
-			if (currentSprite != sprite) {
-				scaleTimer = .5*60d*delta;
-				currentSprite = sprite;
+		if (timer >= 4) { //scale down
+			if (!manager.hasStarted()) {
+				manager.startGame();
 			}
-			scaleTimer+=.025*60d*delta;
+			scaleAmount = -5 * Math.pow((timer-4)-0.2, 2) + 2.2;
 		} else {
-			shrinkRate-=.01*60d*delta;
-			
-			scaleTimer+=shrinkRate;
-			if (scaleTimer-.1 <= 0) {
-				PuyoGameMain.getGameEngine().removeGameObject(this);
-				
-			}
+			scaleAmount = (timer % 1) + 1;
 		}
-		currentSprite.setScale(scaleTimer, scaleTimer);
+		if (scaleAmount <= 0) {
+			GameEngine.removeGameObject(this);
+		}
+		
 	}
 	public void render(Graphics2D g) {
-		int width = (int) (sprite.getScaleX()*sprite.getImage().getWidth(null));
-		int height = (int) (sprite.getScaleY()*sprite.getImage().getHeight(null));
+		int width = (int) (scaleAmount*sprite.getImage().getWidth(null));
+		int height = (int) (scaleAmount*sprite.getImage().getHeight(null));
+		
 		if (width == 0 || height == 0) { return; }
-		g.drawImage(sprite.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH), (int) (x-(width/2)), (int) (y-(height/2)), null);
-	}
-	public void shrink() {
-		shrink = true;
+		g.drawImage(sprite.getImage(), (int) (x-(width/2)), (int) (y-(height/2)), width, height, null);
 	}
 }

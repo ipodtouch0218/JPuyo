@@ -4,9 +4,8 @@ import me.ipodtouch0218.java2dengine.sound.StreamedSound;
 
 public enum GameMusic {
 	
-	CLASSIC("classic.wav", 3484000, -1), 
-	BIT("8bit.wav"), 
-	MEANBEAN("meanbean.wav"),
+	ARLES_THEME("songs/arlestheme.wav", 3484000, -1),
+	LAST_FROM_TSU("songs/lastfrompuyotsu.wav", 4255488, -1),
 	FEVER("fever.wav", 2457697, 4836510),
 	PANIC("panic.wav", 692500, -1);
 	
@@ -21,12 +20,11 @@ public enum GameMusic {
 		this.soundDir = soundDir;
 	    this.loopStart = loopStart;
 	    this.loopEnd = loopEnd;
-	    sound = new StreamedSound("music/" + soundDir);
+	    sound = new StreamedSound("music/" + soundDir, 0.5);
 	}
 	  
 	public void start(long startPos) {
-	    int pos = (int)(startPos % sound.getFrameLength());
-	    sound.setStartingPos(pos);
+	    sound.setStartPos(startPos);
 	    sound.loop(loopStart,loopEnd,-1);
 	}
 	  

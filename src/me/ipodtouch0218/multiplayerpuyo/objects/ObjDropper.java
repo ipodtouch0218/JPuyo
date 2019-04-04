@@ -1,19 +1,24 @@
 package me.ipodtouch0218.multiplayerpuyo.objects;
 
+import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.VolatileImage;
 
+import me.ipodtouch0218.java2dengine.display.sprite.GameSprite;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
 import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain.RenderQuality;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType;
 import me.ipodtouch0218.multiplayerpuyo.PuyoType.PuyoSprites;
 import me.ipodtouch0218.multiplayerpuyo.manager.PuyoBoardManager;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPartyBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
 import me.ipodtouch0218.multiplayerpuyo.sound.GameSounds;
 
 public class ObjDropper extends GameObject {
 
+	private static final GameSprite noRotate = new GameSprite("ui/board/norotate.png", false);
 	public static final int[][][] shapeOffset = { {{0,0},{0,-1}}, {{0,0},{1,0}}, {{0,0},{0,1}}, {{0,0},{-1,0}} };
 	
 	private ObjPuyoBoard board;
@@ -21,7 +26,6 @@ public class ObjDropper extends GameObject {
 	private double puyoY;
 	private int rotation;
 
-	
 	private double flashTimer = 0.5, rotTimer, moveDelay, dropTimer, landTimer, doublerotTimer;
 	private int lowestY;
 	private boolean rightrot;
@@ -32,15 +36,12 @@ public class ObjDropper extends GameObject {
 	private boolean disabled;
 	
 	public ObjDropper(ObjPuyoBoard board, PuyoType main, PuyoType other) {
+		this(board);
+		resetDropper(main, other);
+	}
+	public ObjDropper(ObjPuyoBoard board) {
 		this.board = board;
-		this.mainType = main;
-		this.otherType = other;
-		
-		this.dropTimer = board.getBoardManager().getDropSpeed()/60d;
-		this.landTimer = board.getBoardManager().getDropSpeed()/60d;
-		this.smooth = (board instanceof ObjPuyoFeverBoard);
-		this.puyoX = 2;
-		this.puyoY = 2;
+		this.smooth = (board.getBoardManager().getGamemode().getGamemodeSettings().smoothDropper);
 	}
 	
 	private boolean deleted;
@@ -50,6 +51,10 @@ public class ObjDropper extends GameObject {
 		if (PuyoBoardManager.isPaused()) { return; }
 		if (deleted) {
 			return;
+		}
+		if (update) {
+			cachedlocs = finalDropLocations();
+			board.checkForFlashing(cachedlocs);
 		}
 		update = (cachedlocs == null);
 		prevY = puyoY;
@@ -73,17 +78,15 @@ public class ObjDropper extends GameObject {
 					prevX = puyoX;
 				}
 			}
-			if (checkForRotation()) {
+			
+			boolean rotd = checkForRotation();
+			if (rotd) {
 				update = true;
 			}
 			
 			checkForLanding(delta);
 		}
 		
-		if (update) {
-			cachedlocs = finalDropLocations();
-			board.checkForFlashing(cachedlocs);
-		}
 		if (instaTimer > 0) {
 			instaTimer-=delta;
 		}
@@ -106,9 +109,9 @@ public class ObjDropper extends GameObject {
 		
 		g.drawImage(mainType.getSprite(PuyoSprites.DROPPER).getImage(), (int) (board.getX()-4 + (cachedlocs[0][0]*16)), (int) (board.getY()+3 + ((cachedlocs[0][1]-2)*16)), null);
 		g.drawImage(otherType.getSprite(PuyoSprites.DROPPER).getImage(), (int) (board.getX()-4 + (cachedlocs[1][0]*16)), (int) (board.getY()+3 + ((cachedlocs[1][1]-2)*16)), null);
-		
+
+		int[][] offsets = shapeOffset[rotation];
 		if (mainType != otherType || !smooth) {
-			int[][] offsets = shapeOffset[rotation];
 			VolatileImage mainImg = mainType.getSprite(PuyoSprites.BASE).getImage();
 			if (flashTimer > 0.25) {
 				mainImg = mainType.getSprite(PuyoSprites.HIGHLIGHTED).getImage();
@@ -132,9 +135,26 @@ public class ObjDropper extends GameObject {
 			g.drawImage(mainType.getSprite(PuyoSprites.LONG).getImage(), rotateImg(), null);
 		}
 		g.setClip(null);
+		if (board instanceof ObjPartyBoard) {
+			if (((ObjPartyBoard) board).getNoRotation() && doublerotTimer > 0) {
+				g.drawImage(noRotate.getImage(), (int) (board.getX()-4 + (offsets[0][0] + puyoX)*16)-8, (int) (board.getY()-4 + ((offsets[0][1] + puyoY-2)*16))-8, null);
+			}
+		}
+	}
+	public void cullSpotlight(Graphics2D gr) {
+		AffineTransform old = gr.getTransform();
+		gr.rotate(Math.toRadians(rotateAmt));
+		
+		gr.setComposite(AlphaComposite.Clear);
+		gr.fillRoundRect(puyoX*16+xfac, (int) (puyoY*((board.getHeight()-2)*16)), 32, 16, 4, 3);
+		//draw shape/image (will be rotated)
+		gr.setComposite(AlphaComposite.SrcOver);
+		gr.setTransform(old);
 	}
 	
 	private AffineTransform tx;
+	private double rotateAmt;
+	private int xfac;
 	private int prevrot = rotation;
 	private AffineTransform rotateImg() {
 		if (tx != null && !update && rotTimer == 0 && prevX == puyoX) {
@@ -170,17 +190,17 @@ public class ObjDropper extends GameObject {
 	    	prevrot = rotation;
 	    	rotTimer = 0;
 	    }
-	    int xfac = (int) ((prevX-puyoX)*16*(moveDelay/0.045));
+	    xfac = (int) ((prevX-puyoX)*16*(moveDelay/0.045));
 		
 		tx.translate(8, 24);
 	    
-		double amt = rotation;
+		rotateAmt = rotation;
 		if (PuyoGameMain.quality == RenderQuality.HIGH) {
-			amt = rotation + ((prevrot+(prevrot+3 == rotation ? 4 : 0)-(rotation+(prevrot == rotation+3 ? 4 : 0)))*(rotTimer/0.1d));
+			rotateAmt = rotation + ((prevrot+(prevrot+3 == rotation ? 4 : 0)-(rotation+(prevrot == rotation+3 ? 4 : 0)))*(rotTimer/0.1d));
 		}
 	    tx.translate((board.getX()-4 + (puyoX*16)) + xfac, (board.getY()-2-3 + (((puyoY-1)-2)*16)));
 	    
-	    tx.rotate(Math.toRadians(amt*90d));
+	    tx.rotate(Math.toRadians(rotateAmt*90d));
 	    tx.translate(-8, -24);
 	    
 	    return tx;
@@ -210,9 +230,13 @@ public class ObjDropper extends GameObject {
 			}
 		}
 		if (board.getControls().isFastDropDown() && checkForQuick) {
-			for (int i = 0; i < 5; i++) 
-				moveVertical(0.1);
-			board.addScore(1);
+			int orig = (int) puyoY;
+			for (int i = 0; i < 4; i++) {
+				moveVertical(12d*delta/0.75/4);
+			}
+			if ((int) puyoY != orig) {
+				board.addScore(1);
+			}
 			checkForInsta = false;
 		}
 		if (board.getControls().isInstaDropDown() && checkForInsta && board.getBoardManager().getInstaDrop()) {
@@ -229,11 +253,21 @@ public class ObjDropper extends GameObject {
 		boolean rotright = board.getControls().isTurnRightDown();
 		boolean rotleft = board.getControls().isTurnLeftDown();
 		
+		if (board instanceof ObjPartyBoard) {
+			if (((ObjPartyBoard) board).getNoRotation() && ((rotright && !rotrightdown) || (rotleft && !rotleftdown))) {
+				rotrightdown = rotright;
+				rotleftdown = rotleft;
+				GameSounds.PARTY_ITEM_ROTATE_DENY.play();
+				doublerotTimer = 0.5;
+				return false;
+			}
+		}
+		
 		if ((rotright || rotleft) && !((rotright && rotleft) && !(rotleftdown && rotrightdown))) {
 			if (rotright && !rotrightdown) {
 				returnv = turn(-1);
 				
-				if (!returnv && board.getBoardManager().getVerticalFlip()) {
+				if (!returnv && board.getBoardManager().getGamemode().getGamemodeSettings().verticalFlip) {
 					if (doublerotTimer > 0) {
 						returnv = turn(-2);
 						doublerotTimer = 0;
@@ -245,7 +279,7 @@ public class ObjDropper extends GameObject {
 			if (rotleft && !rotleftdown) {
 				returnv = turn(1);
 				
-				if (!returnv && board.getBoardManager().getVerticalFlip()) {
+				if (!returnv && board.getBoardManager().getGamemode().getGamemodeSettings().verticalFlip) {
 					if (doublerotTimer > 0) {
 						returnv = turn(2);
 						doublerotTimer = 0;
@@ -265,7 +299,7 @@ public class ObjDropper extends GameObject {
 
 		if (Math.floor(puyoY) > lowestY) {
 			lowestY = (int) Math.floor(puyoY);
-			landTimer = (board.getBoardManager().getDropSpeed()*2)/60d;
+			resetLandTimer();
 		}
 		if (intersectsBoard(puyoX, puyoY+(smooth ? 0.10 : 0.5), rotation)) {
 			landTimer-=delta;
@@ -276,17 +310,23 @@ public class ObjDropper extends GameObject {
 		if (!smooth) {
 			dropTimer-=delta;
 			if (dropTimer <= 0) {
-				dropTimer = (board.getBoardManager().getDropSpeed()/45d);
+				resetDropTimer();
 				moveVertical(0.5);
 			}
 		} else {
-			moveVertical((0.5/(board.getBoardManager().getDropSpeed()/45d))*delta);
+			double speed = board.getBoardManager().getDropSpeed();
+			if (board instanceof ObjPartyBoard) {
+				if (((ObjPartyBoard) board).getCustomDropSpeed() != -1) {
+					speed = ((ObjPartyBoard) board).getCustomDropSpeed();
+				}
+			}
+			moveVertical((0.5/(speed/45d))*delta);
 		}
 	}
 	
 	private void instaDrop() {
 		prevY = puyoY;
-		while (moveVertical(0.5)) { board.addScore(1); }
+		while (moveVertical(0.5)) { board.addScore(0.5); }
 		dropOnBoard();
 	}
 	
@@ -317,7 +357,7 @@ public class ObjDropper extends GameObject {
 				}
 				int adj = puyoX + shapeOffset[newRot][1][0];
 				if (adj >= 0 && adj < board.getWidth()) {
-					board.squishRow(adj, 0.03, 4);
+					board.squishcolumn(adj, 0.03, 4);
 				}
 				prevrot = rotation;
 				puyoX = newX;
@@ -338,7 +378,7 @@ public class ObjDropper extends GameObject {
 				}
 				int adj = puyoX + shapeOffset[newRot][1][0];
 				if (adj >= 0 && adj < board.getWidth()) {
-					board.squishRow(adj, 0.03, 4);
+					board.squishcolumn(adj, 0.03, 4);
 				}
 				prevrot = rotation;
 				puyoX = newX;
@@ -353,13 +393,19 @@ public class ObjDropper extends GameObject {
 	}
 	
 	private boolean moveVertical(double amount) {
-		if (!intersectsBoard(puyoX, puyoY - (smooth ? 0 : 0.5) + amount, rotation)) {
+		if (!intersectsBoard(puyoX, puyoY + amount, rotation)) {
 			puyoY += amount;
 			return true;
+		} else {
+			double prevY = puyoY;
+			puyoY = (int) getTopPuyo(puyoX)+1;
+			while (intersectsBoard(puyoX, puyoY - (smooth ? 0.01 : 0), rotation)) {
+				puyoY -= 0.51;
+			}
+			return !((puyoY-prevY) <= (smooth ? 0.05 : 0.05));
 		}
-		return false;
 	}
-	
+ 
 	private boolean moveHorizontal(int amount) {
 		if (!intersectsBoard(puyoX + amount, puyoY, rotation)) {
 			prevX = puyoX;
@@ -372,15 +418,14 @@ public class ObjDropper extends GameObject {
 	}
 	
 	private void dropOnBoard() {
+		disable();
 		int[][] locs = dropLocations();
-		board.setPuyoAt(locs[0][0], (int) (locs[0][1]), mainType);
-		board.setPuyoAt(locs[1][0], (int) (locs[1][1]), otherType);
+		board.setPuyoTypeAt(locs[0][0], (int) (locs[0][1]), mainType);
+		board.setPuyoTypeAt(locs[1][0], (int) (locs[1][1]), otherType);
 		board.onPuyoLand(false);
-		PuyoGameMain.getGameEngine().removeGameObject(this);
+//		GameEngine.removeGameObject(this);
 		GameSounds.DROP.play();
 	}
-	
-
 	
 	private boolean intersectsBoard(int xpos, double ypos, int rotation) {
 		ypos+=0.5;
@@ -448,6 +493,32 @@ public class ObjDropper extends GameObject {
 		return droplocs;
 	}
 	
+	public void resetDropper(PuyoType main, PuyoType other) {
+		this.mainType = main;
+		this.otherType = other;
+		this.puyoX = 2;
+		this.puyoY = 2;
+		this.rotation = 0;
+		this.lowestY = 0;
+		this.disabled = false;
+		resetDropTimer();
+		resetLandTimer();
+		update = true;
+	}
+	
+	private void resetDropTimer() {
+		double speed = board.getBoardManager().getDropSpeed();
+		if (board instanceof ObjPartyBoard) {
+			if (((ObjPartyBoard) board).getCustomDropSpeed() != -1) {
+				speed = ((ObjPartyBoard) board).getCustomDropSpeed();
+			}
+		}
+		this.dropTimer = speed/45d;
+	}
+	private void resetLandTimer() {
+		this.landTimer = 1;
+	}
+	
 	//--getters/setters--//
 	public void disable() { disabled = true; }
 	public void enable() { 
@@ -480,4 +551,5 @@ public class ObjDropper extends GameObject {
 	public void delete() {
 		deleted = true;
 	}
+
 }

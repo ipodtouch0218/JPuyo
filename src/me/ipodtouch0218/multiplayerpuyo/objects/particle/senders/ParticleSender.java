@@ -5,6 +5,7 @@ import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Point;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.display.sprite.GameSprite;
 import me.ipodtouch0218.java2dengine.object.GameObject;
 import me.ipodtouch0218.java2dengine.util.Vector2D;
@@ -42,7 +43,7 @@ public abstract class ParticleSender extends GameObject {
 		
 		if (vel.getMagnitude() < velocity) {
 			done = true;
-			PuyoGameMain.getGameEngine().removeGameObject(this);
+			GameEngine.removeGameObject(this);
 			arrived();
 			return;
 		}
@@ -60,13 +61,12 @@ public abstract class ParticleSender extends GameObject {
 	public boolean done() { return done; }
 	public abstract void arrived();
 	
-	
 	@Override
 	public void render(Graphics2D g) {
 		if (PuyoGameMain.quality == RenderQuality.HIGH && tailX != 0 && tailY != 0) {
 			GradientPaint gPaint = new GradientPaint(new Point((int) x,(int) y), tail, new Point(tailX,tailY), new Color(255,255,255,100));
 			g.setPaint(gPaint);
-			g.fillPolygon(new int[]{tailX,(int) (x+sprite.getImage().getWidth()),(int) x}, new int[]{tailY,(int) (y+(sprite.getImage().getHeight()/2)),(int) (y+(sprite.getImage().getHeight()/2))}, 3);
+			g.fillPolygon(new int[]{tailX+4,(int) (x+sprite.getImage().getWidth()),(int) x}, new int[]{tailY+4,(int) (y+(sprite.getImage().getHeight()/2)),(int) (y+(sprite.getImage().getHeight()/2))}, 3);
 		}
 		
 		g.drawImage(sprite.getImage(), (int) x, (int) y, null);

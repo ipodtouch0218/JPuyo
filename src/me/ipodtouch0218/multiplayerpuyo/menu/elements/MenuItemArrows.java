@@ -9,10 +9,10 @@ import me.ipodtouch0218.multiplayerpuyo.manager.PlayerManager;
 
 public class MenuItemArrows<T> extends MenuElement {
 	
-	private static final GameSprite selectedLeft = new GameSprite("ui/menu/arrow-left-selected.png");
-	private static final GameSprite selectedRight = new GameSprite("ui/menu/arrow-right-selected.png");
-	private static final GameSprite left = new GameSprite("ui/menu/arrow-left.png");
-	private static final GameSprite right = new GameSprite("ui/menu/arrow-right.png");
+	private static final GameSprite selectedLeft = new GameSprite("ui/menu/arrow-left-selected.png", false);
+	private static final GameSprite selectedRight = new GameSprite("ui/menu/arrow-right-selected.png", false);
+	private static final GameSprite left = new GameSprite("ui/menu/arrow-left.png", false);
+	private static final GameSprite right = new GameSprite("ui/menu/arrow-right.png", false);
 	
 	private T[] display;
 	protected int value;

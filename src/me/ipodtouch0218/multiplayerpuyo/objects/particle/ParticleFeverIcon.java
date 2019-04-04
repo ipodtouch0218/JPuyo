@@ -2,14 +2,14 @@ package me.ipodtouch0218.multiplayerpuyo.objects.particle;
 
 import java.awt.Graphics;
 
+import me.ipodtouch0218.java2dengine.GameEngine;
 import me.ipodtouch0218.java2dengine.display.sprite.GameSprite;
 import me.ipodtouch0218.java2dengine.object.GameObject;
-import me.ipodtouch0218.multiplayerpuyo.PuyoGameMain;
-import me.ipodtouch0218.multiplayerpuyo.objects.ObjPuyoBoard;
+import me.ipodtouch0218.multiplayerpuyo.objects.boards.ObjPuyoBoard;
 
 public class ParticleFeverIcon extends GameObject {
 
-	private static final GameSprite fever = new GameSprite("particles/fever.png");
+	private static final GameSprite fever = new GameSprite("particles/fever.png", false);
 	private double lifetime = 1.5;
 	private double stretch = 0;
 	
@@ -26,7 +26,7 @@ public class ParticleFeverIcon extends GameObject {
 		}
 		
 		if (lifetime <= 0) {
-			PuyoGameMain.getGameEngine().removeGameObject(this);
+			GameEngine.removeGameObject(this);
 		}
 	}
 	
